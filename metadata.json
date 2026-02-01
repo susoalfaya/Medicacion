@@ -1,0 +1,7 @@
+{
+  "name": "MediGestión",
+  "description": "Aplicación inteligente para la gestión de tomas de medicamentos y curas. Permite escanear recetas con IA, gestionar múltiples usuarios y notificar pautas.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
