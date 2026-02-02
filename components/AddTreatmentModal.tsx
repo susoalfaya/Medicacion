@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { X, Camera, Sparkles, Loader2, Plus, Trash2, CheckCircle2, AlertCircle, Image as ImageIcon } from 'lucide-react';
+import { X, Camera, Sparkles, Loader2, Plus, Trash2, CheckCircle2, AlertCircle, Image as ImageIcon, WifiOff } from 'lucide-react';
 import { analyzeRecipeImage } from '../services/geminiService';
 import { TreatmentType } from '../types';
 
@@ -23,6 +23,7 @@ export const AddTreatmentModal: React.FC<AddTreatmentModalProps> = ({ isOpen, on
   const [activeTab, setActiveTab] = useState<'manual' | 'scan' | 'review'>('manual');
   const [isScanning, setIsScanning] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isOnline = navigator.onLine;
 
   const getTodayDate = () => new Date().toISOString().split('T')[0];
   const getCurrentTime = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -93,6 +94,11 @@ export const AddTreatmentModal: React.FC<AddTreatmentModalProps> = ({ isOpen, on
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (!navigator.onLine) {
+        alert("Necesitas conexión a internet para usar la IA de Google.");
+        return;
+    }
 
     setIsScanning(true);
     const reader = new FileReader();
@@ -165,15 +171,19 @@ export const AddTreatmentModal: React.FC<AddTreatmentModalProps> = ({ isOpen, on
                 Manual
                 </button>
                 <button
-                onClick={() => setActiveTab('scan')}
+                onClick={() => isOnline && setActiveTab('scan')}
+                disabled={!isOnline}
                 className={`flex-1 py-2.5 text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 ${
                     activeTab === 'scan' ? 'bg-white text-indigo-600 shadow-sm' : 'bg-transparent text-slate-500 shadow-none hover:text-slate-600'
-                }`}
+                } ${!isOnline ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                <Sparkles className="w-4 h-4" />
+                {isOnline ? <Sparkles className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
                 Escanear IA
                 </button>
              </div>
+             {!isOnline && (
+                 <p className="text-xs text-center mt-2 text-slate-400 font-medium">Conéctate a internet para usar la IA</p>
+             )}
           </div>
         )}
 

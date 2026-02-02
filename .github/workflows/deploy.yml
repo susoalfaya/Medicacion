@@ -20,7 +20,11 @@ jobs:
       - name: Build
         run: npm run build
         env:
+          # Google Gemini Key
           API_KEY: ${{ secrets.API_KEY }}
+          # Supabase Keys (Opcionales, si las configuras en GitHub se inyectan solas)
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_KEY: ${{ secrets.VITE_SUPABASE_KEY }}
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4

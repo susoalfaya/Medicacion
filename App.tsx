@@ -4,7 +4,7 @@ import { Treatment, HistoryLog, UserProfile, TreatmentType } from './types';
 import { Navigation } from './components/Navigation';
 import { AddTreatmentModal } from './components/AddTreatmentModal';
 import { ConfirmActionModal } from './components/ConfirmActionModal';
-import { Check, X, Clock, AlertCircle, Edit2, Trash2, Droplets, Pill, Calendar, User, ChevronRight, Download, Upload, Save, Cloud, Database, Copy, RefreshCw, Wifi, WifiOff, LogOut, Lock, BellRing, Smartphone, CalendarDays, RefreshCcw, CheckCircle2 } from 'lucide-react';
+import { Check, X, Clock, AlertCircle, Edit2, Trash2, Droplets, Pill, Calendar, User, ChevronRight, Download, Upload, Save, Cloud, Database, Copy, RefreshCw, Wifi, WifiOff, LogOut, Lock, BellRing, Smartphone, CalendarDays, RefreshCcw, CheckCircle2, Share } from 'lucide-react';
 
 // --- Helper Functions ---
 
@@ -26,7 +26,6 @@ const getGreeting = () => {
 };
 
 // --- DB Mapping Helpers ---
-// (Kept same as before)
 const mapUserToDB = (u: UserProfile) => ({
     id: u.id,
     name: u.name,
@@ -98,6 +97,9 @@ function App() {
   
   // PWA Install Prompt State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+  const [showIOSPrompt, setShowIOSPrompt] = useState(false);
 
   // Sync / Notification State
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'info' | 'warning', action?: { label: string, onClick: () => void } } | null>(null);
@@ -117,7 +119,7 @@ function App() {
   const [supabaseConfig, setSupabaseConfig] = useState<{url: string, key: string} | null>(() => {
       // 1. Try Environment Variables (Vite standard)
       const envUrl = import.meta.env.VITE_SUPABASE_URL;
-      const envKey = import.meta.env.VITE_SUPABASE_KEY; // Or VITE_SUPABASE_ANON_KEY
+      const envKey = import.meta.env.VITE_SUPABASE_KEY;
       
       if (envUrl && envKey) {
         return { url: envUrl, key: envKey };
@@ -129,8 +131,8 @@ function App() {
   });
 
   const [supabaseClient, setSupabaseClient] = useState<SupabaseClient | null>(null);
-  const [isOnline, setIsOnline] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
+  const [isCloudConfigured, setIsCloudConfigured] = useState(false);
+  const [isNetworkOnline, setIsNetworkOnline] = useState(navigator.onLine);
   
   // Modal for confirming actions
   const [actionModal, setActionModal] = useState<{
@@ -156,8 +158,42 @@ function App() {
     return saved ? JSON.parse(saved) : [];
   });
 
-  // --- Install Prompt Effect ---
+  // --- Network Status Effect ---
   useEffect(() => {
+    const handleOnline = () => {
+      setIsNetworkOnline(true);
+      setToast({ message: 'Conexión recuperada', type: 'success' });
+    };
+    const handleOffline = () => {
+      setIsNetworkOnline(false);
+      setToast({ message: 'Sin conexión. Modo Offline activado.', type: 'warning' });
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // --- Install Prompt & Standalone Detection ---
+  useEffect(() => {
+    // Check if running in standalone mode (already installed)
+    const isInStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || 
+                             (window.navigator as any).standalone || 
+                             document.referrer.includes('android-app://');
+    setIsStandalone(isInStandaloneMode);
+
+    // Detect iOS
+    const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    setIsIOS(iOS);
+    if (iOS && !isInStandaloneMode) {
+        // Show prompt after a short delay
+        setTimeout(() => setShowIOSPrompt(true), 3000);
+    }
+
     const handler = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -181,23 +217,23 @@ function App() {
           try {
               const client = createClient(supabaseConfig.url, supabaseConfig.key);
               setSupabaseClient(client);
-              setIsOnline(true);
+              setIsCloudConfigured(true);
           } catch (e) {
               console.error("Supabase init error", e);
-              setIsOnline(false);
+              setIsCloudConfigured(false);
           }
       } else {
           setSupabaseClient(null);
-          setIsOnline(false);
+          setIsCloudConfigured(false);
       }
   }, [supabaseConfig]);
 
   // --- Data Loading & Subscription Effect ---
   useEffect(() => {
-      if (!supabaseClient || !isOnline) return;
+      // Only try to sync if we have a client AND network
+      if (!supabaseClient || !isNetworkOnline) return;
 
       const fetchData = async () => {
-          setSyncStatus('syncing');
           try {
               const { data: usersData } = await supabaseClient.from('users').select('*');
               if (usersData && usersData.length > 0) {
@@ -215,10 +251,8 @@ function App() {
               const { data: historyData } = await supabaseClient.from('history').select('*');
               if (historyData) setHistory(historyData.map(mapHistoryFromDB));
               
-              setSyncStatus('idle');
           } catch (e) {
               console.error("Fetch error", e);
-              setSyncStatus('error');
           }
       };
 
@@ -267,7 +301,7 @@ function App() {
           supabaseClient.removeChannel(channel);
       }
 
-  }, [supabaseClient, isOnline]);
+  }, [supabaseClient, isNetworkOnline]);
 
   // --- Local Persistence Effects ---
   useEffect(() => {
@@ -357,13 +391,21 @@ function App() {
       active: true,
     };
 
-    if (isOnline && supabaseClient) {
-        await supabaseClient.from('treatments').insert(mapTreatmentToDB(newTreatment));
-    } else {
-        setTreatments(prev => [...prev, newTreatment]);
+    // Optimistic Update: Always update local state immediately
+    setTreatments(prev => [...prev, newTreatment]);
+
+    // Try Cloud sync if possible
+    if (isCloudConfigured && isNetworkOnline && supabaseClient) {
+        try {
+            await supabaseClient.from('treatments').insert(mapTreatmentToDB(newTreatment));
+        } catch (error) {
+            console.error("Sync error, saved locally only for now", error);
+            setToast({ message: 'Guardado localmente. Se sincronizará al volver la conexión.', type: 'info' });
+        }
     }
+
     setToast({ 
-        message: 'Tratamiento guardado. Recuerda exportar tu agenda.', 
+        message: 'Tratamiento guardado.', 
         type: 'success',
         action: { label: 'Exportar Agenda', onClick: handleExportCalendar } 
     });
@@ -475,14 +517,20 @@ function App() {
 
     const updatedTreatment = { ...treatment, nextScheduledTime: nextTime };
 
-    if (isOnline && supabaseClient) {
-        await Promise.all([
-            supabaseClient.from('treatments').update(mapTreatmentToDB(updatedTreatment)).eq('id', treatmentId),
-            supabaseClient.from('history').insert(mapHistoryToDB(log))
-        ]);
-    } else {
-        setTreatments(prev => prev.map(t => t.id === treatmentId ? updatedTreatment : t));
-        setHistory(h => [log, ...h]);
+    // Optimistic Update
+    setTreatments(prev => prev.map(t => t.id === treatmentId ? updatedTreatment : t));
+    setHistory(h => [log, ...h]);
+
+    // Async Cloud Sync
+    if (isCloudConfigured && isNetworkOnline && supabaseClient) {
+        try {
+            await Promise.all([
+                supabaseClient.from('treatments').update(mapTreatmentToDB(updatedTreatment)).eq('id', treatmentId),
+                supabaseClient.from('history').insert(mapHistoryToDB(log))
+            ]);
+        } catch(e) {
+            console.error("Sync error in background");
+        }
     }
 
     setActionModal(prev => ({ ...prev, isOpen: false, treatmentId: null }));
@@ -498,15 +546,16 @@ function App() {
         setToast({ message: 'Registrado correctamente', type: 'success' });
     }
 
-  }, [currentUser, actionModal, treatments, isOnline, supabaseClient, handleExportCalendar]);
+  }, [currentUser, actionModal, treatments, isCloudConfigured, isNetworkOnline, supabaseClient, handleExportCalendar]);
 
 
   const handleDelete = async (id: string) => {
       if(confirm('¿Seguro que quieres eliminar este tratamiento?')) {
-          if (isOnline && supabaseClient) {
+          // Optimistic
+          setTreatments(prev => prev.filter(t => t.id !== id));
+          
+          if (isCloudConfigured && isNetworkOnline && supabaseClient) {
               await supabaseClient.from('treatments').delete().eq('id', id);
-          } else {
-              setTreatments(prev => prev.filter(t => t.id !== id));
           }
       }
   };
@@ -523,10 +572,11 @@ function App() {
               pin: pin || undefined
           };
           
-          if (isOnline && supabaseClient) {
+          // Optimistic
+          setUsers(prev => [...prev, newUser]);
+          
+          if (isCloudConfigured && isNetworkOnline && supabaseClient) {
               await supabaseClient.from('users').insert(mapUserToDB(newUser));
-          } else {
-              setUsers(prev => [...prev, newUser]);
           }
       }
   };
@@ -562,7 +612,7 @@ function App() {
         const data = JSON.parse(json);
 
         if (data.users && Array.isArray(data.users)) {
-          if (isOnline && supabaseClient) {
+          if (isCloudConfigured && isNetworkOnline && supabaseClient) {
              const confirmCloud = confirm("Estás conectado a la nube. ¿Quieres subir estos datos a la nube? (Esto puede duplicar datos si ya existen)");
              if (confirmCloud) {
                  for (const u of data.users) await supabaseClient.from('users').upsert(mapUserToDB(u));
@@ -606,7 +656,7 @@ function App() {
       if(confirm('¿Desconectar de la nube? Volverás a usar los datos locales.')) {
           setSupabaseConfig(null);
           setSupabaseClient(null);
-          setIsOnline(false);
+          setIsCloudConfigured(false);
           localStorage.removeItem('medigest_supabase_config');
       }
   };
@@ -674,9 +724,11 @@ function App() {
               </button>
               
               <div className="mt-8 text-center">
-                  <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold tracking-wide uppercase transition-all ${isOnline ? 'bg-emerald-100/50 text-emerald-700 border border-emerald-200' : 'bg-slate-200/50 text-slate-500 border border-slate-200'}`}>
-                      {isOnline ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-                      {isOnline ? 'Sincronizado' : 'Modo Local'}
+                  <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold tracking-wide uppercase transition-all ${isNetworkOnline && isCloudConfigured ? 'bg-emerald-100/50 text-emerald-700 border border-emerald-200' : 'bg-slate-200/50 text-slate-500 border border-slate-200'}`}>
+                      {isNetworkOnline ? (isCloudConfigured ? <Wifi className="w-3 h-3" /> : <Cloud className="w-3 h-3 text-slate-400" />) : <WifiOff className="w-3 h-3" />}
+                      {isNetworkOnline 
+                         ? (isCloudConfigured ? 'Sincronizado' : 'Modo Local (Online)') 
+                         : 'Modo Sin Conexión'}
                   </div>
               </div>
           </div>
@@ -705,10 +757,12 @@ function App() {
               </p>
           </div>
           <div className="hidden sm:block">
-              {isOnline ? (
-                <div className="w-3 h-3 bg-emerald-500 rounded-full shadow-[0_0_10px_#10b981]"></div>
+              {isCloudConfigured && isNetworkOnline ? (
+                <div title="Sincronizado en la nube" className="w-3 h-3 bg-emerald-500 rounded-full shadow-[0_0_10px_#10b981]"></div>
+              ) : !isNetworkOnline ? (
+                <div title="Sin conexión a internet" className="w-3 h-3 bg-rose-400 rounded-full shadow-[0_0_10px_#fb7185]"></div>
               ) : (
-                <div className="w-3 h-3 bg-slate-300 rounded-full"></div>
+                <div title="Guardando en dispositivo" className="w-3 h-3 bg-slate-300 rounded-full"></div>
               )}
           </div>
         </header>
@@ -900,8 +954,19 @@ alter publication supabase_realtime add table users, treatments, history;`;
                </div>
             </div>
 
-            {/* Install App Section (Only visible if deferredPrompt exists) */}
-            {deferredPrompt && (
+            {/* Offline Alert if Cloud Configured */}
+            {isCloudConfigured && !isNetworkOnline && (
+                <div className="bg-amber-100 border border-amber-200 rounded-3xl p-4 flex items-start gap-4 text-amber-800">
+                    <WifiOff className="w-6 h-6 shrink-0 mt-1" />
+                    <div>
+                        <h4 className="font-bold">Sin conexión a Internet</h4>
+                        <p className="text-sm mt-1">La sincronización con la nube está pausada. Los cambios que hagas se guardarán en tu dispositivo y se subirán automáticamente cuando recuperes la conexión.</p>
+                    </div>
+                </div>
+            )}
+
+            {/* Install App Section (Only visible if deferredPrompt exists AND not installed) */}
+            {deferredPrompt && !isStandalone && (
                 <div className="bg-indigo-900 rounded-3xl p-6 text-white shadow-xl shadow-indigo-300 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full -mr-10 -mt-10"></div>
                     <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
@@ -911,7 +976,7 @@ alter publication supabase_realtime add table users, treatments, history;`;
                             </div>
                             <div>
                                 <h3 className="text-xl font-bold">Instalar MediGestión</h3>
-                                <p className="text-indigo-200 text-sm">Añade la app a tu inicio para mejor experiencia.</p>
+                                <p className="text-indigo-200 text-sm">Añade la app a tu inicio para usarla sin conexión.</p>
                             </div>
                         </div>
                         <button 
@@ -954,7 +1019,7 @@ alter publication supabase_realtime add table users, treatments, history;`;
                             <h3 className="text-lg font-bold text-white">Nube (Supabase)</h3>
                         </div>
                         
-                        {isOnline ? (
+                        {isCloudConfigured && isNetworkOnline ? (
                             <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl flex items-start gap-3 text-emerald-400 text-sm mb-4">
                                 <Wifi className="w-5 h-5 shrink-0 mt-0.5" />
                                 <div>
@@ -964,11 +1029,13 @@ alter publication supabase_realtime add table users, treatments, history;`;
                             </div>
                         ) : (
                             <p className="text-sm text-slate-400 mb-6 leading-relaxed">
-                                Conecta tu base de datos para acceder desde cualquier dispositivo.
+                                {isCloudConfigured 
+                                  ? "Esperando conexión a internet para sincronizar..." 
+                                  : "Conecta tu base de datos para acceder desde cualquier dispositivo."}
                             </p>
                         )}
                         
-                        {!isOnline && (
+                        {!isCloudConfigured && (
                              <form onSubmit={handleConnectCloud} className="space-y-3">
                                 <input name="sb_url" required defaultValue={supabaseConfig?.url || ''} placeholder="Project URL" className="w-full bg-slate-800 border-none rounded-xl px-4 py-3 text-sm text-white focus:ring-2 focus:ring-sky-500 placeholder-slate-600" />
                                 <input name="sb_key" required defaultValue={supabaseConfig?.key || ''} placeholder="Public Key" className="w-full bg-slate-800 border-none rounded-xl px-4 py-3 text-sm text-white focus:ring-2 focus:ring-sky-500 placeholder-slate-600" />
@@ -978,9 +1045,9 @@ alter publication supabase_realtime add table users, treatments, history;`;
                              </form>
                         )}
                     </div>
-                    {isOnline && (
-                        <button onClick={handleDisconnectCloud} className="w-full py-3 bg-slate-800 hover:bg-slate-700 rounded-xl text-sm font-bold transition-colors text-slate-300">
-                            Desconectar
+                    {isCloudConfigured && (
+                        <button onClick={handleDisconnectCloud} className="w-full py-3 bg-slate-800 hover:bg-slate-700 rounded-xl text-sm font-bold transition-colors text-slate-300 mt-4">
+                            Desconectar Nube
                         </button>
                     )}
                 </div>
@@ -1046,6 +1113,38 @@ alter publication supabase_realtime add table users, treatments, history;`;
         <>
             {renderLoginScreen()}
             <AddTreatmentModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} onSave={handleSaveTreatment} />
+            {/* GLOBAL TOAST (Even on Login) */}
+            {toast && (
+                <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] animate-in fade-in duration-300">
+                    <div className={`px-4 py-2 rounded-full shadow-xl flex items-center gap-2 text-sm font-bold ${
+                        toast.type === 'success' ? 'bg-emerald-500 text-white' : 'bg-slate-800 text-white'
+                    }`}>
+                        {toast.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
+                        {toast.message}
+                    </div>
+                </div>
+            )}
+            
+            {/* iOS Prompt (Login Screen) */}
+            {showIOSPrompt && isIOS && !isStandalone && (
+                <div className="fixed bottom-0 left-0 right-0 z-[200] p-4 animate-in slide-in-from-bottom-5">
+                    <div className="bg-slate-900/90 backdrop-blur-xl text-white p-5 rounded-3xl shadow-2xl relative">
+                        <button onClick={() => setShowIOSPrompt(false)} className="absolute top-2 right-2 p-2 opacity-60 hover:opacity-100"><X className="w-5 h-5"/></button>
+                        <div className="flex items-start gap-4">
+                           <div className="p-3 bg-white/10 rounded-2xl"><Share className="w-6 h-6" /></div>
+                           <div>
+                               <h3 className="font-bold text-lg">Instalar App</h3>
+                               <p className="text-slate-300 text-sm mt-1">
+                                   Para instalar en tu iPhone:
+                                   <br/>1. Pulsa el botón <span className="font-bold">Compartir</span> <Share className="w-3 h-3 inline"/> abajo.
+                                   <br/>2. Selecciona <span className="font-bold">"Añadir a inicio"</span>.
+                               </p>
+                           </div>
+                        </div>
+                        <div className="absolute bottom-[-10px] left-1/2 -translate-x-1/2 w-4 h-4 bg-slate-900/90 rotate-45"></div>
+                    </div>
+                </div>
+            )}
         </>
       )
   }
@@ -1104,6 +1203,26 @@ alter publication supabase_realtime add table users, treatments, history;`;
                   ) : (
                       <button onClick={() => setToast(null)} className="p-1 hover:bg-white/10 rounded-full"><X className="w-4 h-4" /></button>
                   )}
+              </div>
+          </div>
+      )}
+
+      {/* iOS Prompt (Dashboard) */}
+      {showIOSPrompt && isIOS && !isStandalone && (
+          <div className="fixed bottom-4 left-4 right-4 z-[200] animate-in slide-in-from-bottom-5 md:hidden">
+              <div className="bg-slate-900/95 backdrop-blur-xl text-white p-5 rounded-3xl shadow-2xl relative">
+                  <button onClick={() => setShowIOSPrompt(false)} className="absolute top-2 right-2 p-2 opacity-60 hover:opacity-100"><X className="w-5 h-5"/></button>
+                  <div className="flex items-start gap-4">
+                      <div className="p-3 bg-white/10 rounded-2xl"><Share className="w-6 h-6" /></div>
+                      <div>
+                          <h3 className="font-bold text-lg">Instalar App</h3>
+                          <p className="text-slate-300 text-sm mt-1">
+                              Para usar sin conexión:
+                              <br/>1. Pulsa <span className="font-bold">Compartir</span> <Share className="w-3 h-3 inline"/>.
+                              <br/>2. Elige <span className="font-bold">"Añadir a inicio"</span>.
+                          </p>
+                      </div>
+                  </div>
               </div>
           </div>
       )}

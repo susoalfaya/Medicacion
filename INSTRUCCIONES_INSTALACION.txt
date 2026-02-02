@@ -14,19 +14,18 @@ PASO 1: CONSEGUIR LA LLAVE DE LA IA (GOOGLE GEMINI)
 1. Ve a: https://aistudio.google.com/app/apikey
 2. Inicia sesión con tu cuenta de Google.
 3. Pulsa "Create API key".
-4. Copia el código que empieza por "AIza...". Gúardalo en un bloc de notas, lo necesitarás luego.
-   * Esto es GRATIS para uso personal (tiene límites, pero sobran para una familia).
+4. Copia el código que empieza por "AIza...". Gúardalo en un bloc de notas.
 
 -------------------------------------------------------------------------
-PASO 2: PREPARAR LA MEMORIA (SUPABASE) - Opcional si solo usas 1 móvil
+PASO 2: PREPARAR LA MEMORIA (SUPABASE)
 -------------------------------------------------------------------------
 Si quieres que la app funcione en tu PC y tu Móvil a la vez:
 
 1. Ve a: https://supabase.com/ y regístrate (es gratis).
-2. Crea un "New Project". Ponle nombre (ej: MediGestion) y una contraseña fuerte a la base de datos.
+2. Crea un "New Project". Ponle nombre (ej: MediGestion) y una contraseña fuerte.
 3. Espera a que se cree (tarda 1-2 minutos).
 4. Ve al menú lateral izquierdo -> "Project Settings" (icono tuerca) -> "API".
-5. Copia dos cosas:
+5. Copia dos cosas y guárdalas:
    - Project URL (ej: https://xyz.supabase.co)
    - Project API keys -> anon / public (ej: eyJhbGciOiJIUzI1NiIsInR5c...)
 6. Ve al menú lateral izquierdo -> "SQL Editor".
@@ -53,38 +52,32 @@ PASO 3: SUBIR A GITHUB (PUBLICAR LA APP)
 -------------------------------------------------------------------------
 1. Crea una cuenta en https://github.com/ si no tienes.
 2. Crea un "New Repository". Ponle nombre (ej: mi-medigestion) y marca "Public".
-3. Sube todos los archivos de esta carpeta al repositorio (puedes arrastrarlos o usar git si sabes).
-   IMPORTANTE: Asegúrate de que la carpeta ".github/workflows" y el archivo "deploy.yml" dentro de ella se suben.
+3. Sube todos los archivos de esta carpeta al repositorio.
 
 -------------------------------------------------------------------------
-PASO 4: CONFIGURAR LA LLAVE DE IA EN GITHUB
+PASO 4: CONFIGURAR LAS LLAVES EN GITHUB
 -------------------------------------------------------------------------
-Para que la app funcione al publicarse, GitHub necesita la llave del PASO 1.
+Para que todo funcione automático, guarda las llaves en GitHub:
 
 1. En tu repositorio de GitHub, ve a la pestaña "Settings" (arriba).
 2. En el menú izquierdo busca "Secrets and variables" -> "Actions".
-3. Pulsa el botón verde "New repository secret".
-4. En "Name" pon: API_KEY
-5. En "Secret" pega la llave de Google (la que empieza por AIza...).
-6. Dale a "Add secret".
+3. Pulsa "New repository secret" para crear CADA UNA de estas 3 llaves:
+
+   NOMBRE: API_KEY
+   VALOR: (Pega la llave de Google del Paso 1, empieza por AIza...)
+
+   NOMBRE: VITE_SUPABASE_URL
+   VALOR: (Pega la Project URL de Supabase del Paso 2)
+
+   NOMBRE: VITE_SUPABASE_KEY
+   VALOR: (Pega la key anon/public de Supabase del Paso 2)
 
 -------------------------------------------------------------------------
 PASO 5: VER TU APP FUNCIONANDO
 -------------------------------------------------------------------------
-1. Al subir los archivos y poner la clave, GitHub empezará a "construir" tu web.
-2. Ve a la pestaña "Actions" en tu repositorio. Verás un proceso girando.
-3. Cuando termine (se ponga verde), ve a la pestaña "Settings" -> "Pages" (menú izquierdo).
-4. Arriba verás un enlace: "Your site is live at...". ¡ESA ES TU APP!
-   * Puedes instalarla en el móvil abriendo ese enlace y dando a "Añadir a pantalla de inicio".
-
--------------------------------------------------------------------------
-PASO 6: CONECTAR SUPABASE (EN LA APP)
--------------------------------------------------------------------------
-1. Abre tu nueva app.
-2. Crea un usuario y entra.
-3. Ve a la pestaña "Perfiles" (abajo a la derecha o en el menú).
-4. Baja hasta "Nube (Supabase)".
-5. Introduce la "Project URL" y la "Anon Key" que conseguiste en el PASO 2.
-6. Dale a "Conectar".
-
-¡Listo! Ahora tus datos se guardan en la nube.
+1. Ve a la pestaña "Actions" en tu repositorio. Verás un proceso girando.
+2. Cuando termine (verde), ve a la pestaña "Settings" -> "Pages".
+3. Arriba verás el enlace de tu web. ¡Listo!
+   
+   * Si configuraste las llaves del Paso 4, la app se conectará sola a la nube.
+   * Si NO pusiste las llaves de Supabase en GitHub, tendrás que meterlas manualmente en la app (Pestaña Perfiles -> Nube).
