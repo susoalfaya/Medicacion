@@ -197,4 +197,4 @@ export const AddTreatmentModal: React.FC<AddTreatmentModalProps> = ({ isOpen, on
       </div>
     </div>
   );
-};
+}; 
