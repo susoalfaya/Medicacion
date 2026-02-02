@@ -123,9 +123,11 @@ export const AddTreatmentModal: React.FC<AddTreatmentModalProps> = ({ isOpen, on
         } else {
           alert('No se detectaron medicamentos claros. Por favor intenta manualmente.');
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error(error);
-        alert('Error al analizar la imagen. Verifica tu conexión o intenta manualmente.');
+        // Show specific error message (e.g., Leaked Key)
+        const msg = error.message || 'Error al analizar la imagen. Verifica tu conexión o intenta manualmente.';
+        alert(msg);
       } finally {
         setIsScanning(false);
       }

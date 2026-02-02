@@ -16,7 +16,7 @@ Devuelve un array JSON con todos los items encontrados.
 export const analyzeRecipeImage = async (base64Image: string): Promise<ScannedMedication[]> => {
   if (!process.env.API_KEY) {
     console.error("API Key not found");
-    throw new Error("Clave API no configurada.");
+    throw new Error("Clave API no configurada. Revisa los 'Secrets' en GitHub.");
   }
 
   try {
@@ -69,8 +69,15 @@ export const analyzeRecipeImage = async (base64Image: string): Promise<ScannedMe
       return [];
     }
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini API Error:", error);
+    
+    // Detectar clave revocada
+    const errorMsg = error.toString().toLowerCase();
+    if (errorMsg.includes("403") || errorMsg.includes("leaked") || errorMsg.includes("permission_denied")) {
+        throw new Error("🚨 CLAVE BLOQUEADA: Tu API KEY ha sido detectada como pública y revocada por Google. Debes generar una nueva y actualizarla en GitHub Secrets.");
+    }
+    
     throw new Error("No se pudo analizar la imagen. Inténtalo de nuevo.");
   }
 };
