@@ -4,6 +4,11 @@ on:
   push:
     branches: [ main, master ]
 
+# ⬇️ AÑADIDO: Auto-cancela workflows anteriores
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -22,7 +27,7 @@ jobs:
         env:
           # Google Gemini Key
           API_KEY: ${{ secrets.API_KEY }}
-          # Supabase Keys (Opcionales, si las configuras en GitHub se inyectan solas)
+          # Supabase Keys
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_KEY: ${{ secrets.VITE_SUPABASE_KEY }}
 
