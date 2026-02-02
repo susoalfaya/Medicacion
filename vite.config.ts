@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
   
   return {
     plugins: [react()],
-    base: './', // CRUCIAL para GitHub Pages: rutas relativas
+    base: '/Medicacion/', // ✅ CAMBIADO: Ruta absoluta para GitHub Pages
     define: {
       // Polyfill para que process.env.API_KEY funcione tanto en local (.env) como en GitHub Actions (Secrets)
       'process.env.API_KEY': JSON.stringify(env.API_KEY || process.env.API_KEY || '')
