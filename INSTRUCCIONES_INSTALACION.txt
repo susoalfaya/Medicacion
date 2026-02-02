@@ -4,7 +4,7 @@ GUÍA DE INSTALACIÓN PARA "NO INFORMÁTICOS" (DUMMIES)
 Esta app (MediGestión) tiene tres partes:
 1. EL CÓDIGO: Lo que ves aquí.
 2. EL CEREBRO (IA): Google Gemini (para leer recetas).
-3. LA MEMORIA (Nube): Supabase (para guardar datos y verlos en varios móviles).
+3. LA MEMORIA (Nube): Supabase (para guardar datos y login).
 
 Sigue estos pasos en orden.
 
@@ -14,70 +14,107 @@ PASO 1: CONSEGUIR LA LLAVE DE LA IA (GOOGLE GEMINI)
 1. Ve a: https://aistudio.google.com/app/apikey
 2. Inicia sesión con tu cuenta de Google.
 3. Pulsa "Create API key".
-4. Copia el código que empieza por "AIza...". Gúardalo en un bloc de notas.
+4. Copia el código que empieza por "AIza...". Gúardalo.
 
 -------------------------------------------------------------------------
 PASO 2: PREPARAR LA MEMORIA (SUPABASE)
 -------------------------------------------------------------------------
-Si quieres que la app funcione en tu PC y tu Móvil a la vez:
+1. Ve a: https://supabase.com/ y regístrate.
+2. Crea un "New Project". Ponle nombre y contraseña.
+3. Espera a que se cree.
 
-1. Ve a: https://supabase.com/ y regístrate (es gratis).
-2. Crea un "New Project". Ponle nombre (ej: MediGestion) y una contraseña fuerte.
-3. Espera a que se cree (tarda 1-2 minutos).
-4. Ve al menú lateral izquierdo -> "Project Settings" (icono tuerca) -> "API".
-5. Copia dos cosas y guárdalas:
-   - Project URL (ej: https://xyz.supabase.co)
-   - Project API keys -> anon / public (ej: eyJhbGciOiJIUzI1NiIsInR5c...)
-6. Ve al menú lateral izquierdo -> "SQL Editor".
-7. Pega el siguiente código y dale a "RUN" (botón verde abajo a la derecha):
+4. IMPORTANTE: ACTIVAR AUTENTICACIÓN
+   - Ve al menú izquierdo (Authentication) -> "Providers".
+   - Asegúrate de que "Email" está habilitado.
+   - (Opcional) Desactiva "Confirm email" en "Authentication -> URL Configuration" si no quieres validar emails al registrarte.
+
+5. COPIAR LLAVES
+   - Ve a "Project Settings" (tuerca) -> "API".
+   - Copia "Project URL" y "anon / public key".
+
+6. CREAR LA ESTRUCTURA DE DATOS (SQL)
+   - Ve a "SQL Editor" (menú izquierdo).
+   - Borra lo que haya, pega ESTO EXACTAMENTE y dale a "RUN":
 
    -- COPIA DESDE AQUÍ --
-   create table if not exists users (id text primary key, name text, avatar_color text, pin text);
-   create table if not exists treatments (id text primary key, user_id text, name text, type text, description text, frequency_hours int, next_scheduled_time bigint, start_date bigint, active boolean);
-   create table if not exists history (id text primary key, treatment_id text, treatment_name text, user_id text, timestamp bigint, actual_time bigint, status text, type text);
-   
-   alter table users enable row level security;
+   create extension if not exists "uuid-ossp";
+
+   -- Perfiles de usuario
+   create table profiles (
+     id uuid references auth.users on delete cascade not null primary key,
+     email text,
+     full_name text,
+     avatar_url text,
+     updated_at timestamp with time zone
+   );
+
+   -- Tratamientos
+   create table treatments (
+     id uuid default uuid_generate_v4() primary key,
+     user_id uuid references auth.users on delete cascade not null,
+     name text not null,
+     type text not null,
+     description text,
+     frequency_hours int,
+     next_scheduled_time bigint,
+     start_date bigint,
+     active boolean default true,
+     created_at timestamp with time zone default now()
+   );
+
+   -- Historial
+   create table history (
+     id uuid default uuid_generate_v4() primary key,
+     user_id uuid references auth.users on delete cascade not null,
+     treatment_id uuid references treatments(id) on delete cascade,
+     treatment_name text,
+     timestamp bigint,
+     actual_time bigint,
+     status text,
+     type text,
+     created_at timestamp with time zone default now()
+   );
+
+   -- Seguridad (RLS): Solo tú ves tus datos
+   alter table profiles enable row level security;
    alter table treatments enable row level security;
    alter table history enable row level security;
-   
-   create policy "Public users" on users for all using (true);
-   create policy "Public treatments" on treatments for all using (true);
-   create policy "Public history" on history for all using (true);
-   
-   alter publication supabase_realtime add table users, treatments, history;
+
+   create policy "Users can view own profile" on profiles for select using (auth.uid() = id);
+   create policy "Users can update own profile" on profiles for update using (auth.uid() = id);
+
+   create policy "Users can view own treatments" on treatments for select using (auth.uid() = user_id);
+   create policy "Users can insert own treatments" on treatments for insert with check (auth.uid() = user_id);
+   create policy "Users can update own treatments" on treatments for update using (auth.uid() = user_id);
+   create policy "Users can delete own treatments" on treatments for delete using (auth.uid() = user_id);
+
+   create policy "Users can view own history" on history for select using (auth.uid() = user_id);
+   create policy "Users can insert own history" on history for insert with check (auth.uid() = user_id);
+   create policy "Users can update own history" on history for update using (auth.uid() = user_id);
+
+   -- Trigger para perfil automático
+   create or replace function public.handle_new_user() 
+   returns trigger as $$
+   begin
+     insert into public.profiles (id, email, full_name)
+     values (new.id, new.email, new.raw_user_meta_data->>'full_name');
+     return new;
+   end;
+   $$ language plpgsql security definer;
+
+   create trigger on_auth_user_created
+     after insert on auth.users
+     for each row execute procedure public.handle_new_user();
    -- HASTA AQUÍ --
 
 -------------------------------------------------------------------------
-PASO 3: SUBIR A GITHUB (PUBLICAR LA APP)
+PASO 3: CONFIGURAR GITHUB
 -------------------------------------------------------------------------
-1. Crea una cuenta en https://github.com/ si no tienes.
-2. Crea un "New Repository". Ponle nombre (ej: mi-medigestion) y marca "Public".
-3. Sube todos los archivos de esta carpeta al repositorio.
+1. Sube este código a GitHub.
+2. Ve a Settings -> Secrets and variables -> Actions.
+3. Crea los 3 secretos:
+   - API_KEY: (Tu clave de Google)
+   - VITE_SUPABASE_URL: (Tu URL de Supabase)
+   - VITE_SUPABASE_KEY: (Tu Anon Key de Supabase)
 
--------------------------------------------------------------------------
-PASO 4: CONFIGURAR LAS LLAVES EN GITHUB
--------------------------------------------------------------------------
-Para que todo funcione automático, guarda las llaves en GitHub:
-
-1. En tu repositorio de GitHub, ve a la pestaña "Settings" (arriba).
-2. En el menú izquierdo busca "Secrets and variables" -> "Actions".
-3. Pulsa "New repository secret" para crear CADA UNA de estas 3 llaves:
-
-   NOMBRE: API_KEY
-   VALOR: (Pega la llave de Google del Paso 1, empieza por AIza...)
-
-   NOMBRE: VITE_SUPABASE_URL
-   VALOR: (Pega la Project URL de Supabase del Paso 2)
-
-   NOMBRE: VITE_SUPABASE_KEY
-   VALOR: (Pega la key anon/public de Supabase del Paso 2)
-
--------------------------------------------------------------------------
-PASO 5: VER TU APP FUNCIONANDO
--------------------------------------------------------------------------
-1. Ve a la pestaña "Actions" en tu repositorio. Verás un proceso girando.
-2. Cuando termine (verde), ve a la pestaña "Settings" -> "Pages".
-3. Arriba verás el enlace de tu web. ¡Listo!
-   
-   * Si configuraste las llaves del Paso 4, la app se conectará sola a la nube.
-   * Si NO pusiste las llaves de Supabase en GitHub, tendrás que meterlas manualmente en la app (Pestaña Perfiles -> Nube).
+¡Listo! La próxima vez que entres a la web, verás una pantalla de Login real.

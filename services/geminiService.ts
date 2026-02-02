@@ -72,10 +72,17 @@ export const analyzeRecipeImage = async (base64Image: string): Promise<ScannedMe
   } catch (error: any) {
     console.error("Gemini API Error:", error);
     
-    // Detectar clave revocada
-    const errorMsg = error.toString().toLowerCase();
-    if (errorMsg.includes("403") || errorMsg.includes("leaked") || errorMsg.includes("permission_denied")) {
-        throw new Error("🚨 CLAVE BLOQUEADA: Tu API KEY ha sido detectada como pública y revocada por Google. Debes generar una nueva y actualizarla en GitHub Secrets.");
+    // Convert error to string for analysis and combine standard message + detailed JSON if available
+    const errorMsg = (error.message || '') + JSON.stringify(error).toLowerCase();
+
+    // Detectar clave revocada (leaked)
+    if (errorMsg.includes("leaked") || errorMsg.includes("permission_denied")) {
+        throw new Error("🚨 CLAVE BLOQUEADA: Tu API KEY ha sido detectada como pública. Genera una nueva en Google AI Studio y actualiza GitHub Secrets.");
+    }
+
+    // Detectar clave expirada o inválida (Code 400)
+    if (errorMsg.includes("expired") || errorMsg.includes("api key not valid") || errorMsg.includes("api_key_invalid") || errorMsg.includes("400")) {
+        throw new Error("⌛ CLAVE NO ACTUALIZADA: La web está usando una clave antigua. Si ya la cambiaste en GitHub, espera a que termine el 'Action' y recarga la página borrando caché.");
     }
     
     throw new Error("No se pudo analizar la imagen. Inténtalo de nuevo.");
