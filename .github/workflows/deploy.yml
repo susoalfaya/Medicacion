@@ -4,30 +4,35 @@ on:
   push:
     branches: [ main, master ]
 
-# ⬇️ AÑADIDO: Auto-cancela workflows anteriores
+# Cancela ejecuciones previas si subes código nuevo rápidamente
 concurrency:
-  group: pages-deploy
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
-permissions:
-  contents: write
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Necesario para subir archivos a la rama gh-pages
+    
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4 # Actualizado a v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
 
       - name: Install Dependencies
         run: npm install
 
       - name: Build
+        # Importante: Las variables VITE_ deben estar AQUÍ para que se inyecten en el dist
         run: npm run build
         env:
-          # Google Gemini Key
-          API_KEY: ${{ secrets.API_KEY }}
-          # Supabase Keys
+          VITE_API_KEY: ${{ secrets.API_KEY }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_KEY: ${{ secrets.VITE_SUPABASE_KEY }}
 
@@ -35,3 +40,4 @@ jobs:
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           folder: dist
+          branch: gh-pages # Asegúrate de que esta sea la rama configurada en los settings del repo
