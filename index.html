@@ -2,33 +2,36 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>MediGestión - Control de Medicamentos</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>MediGestión</title>
     
-    <!-- PWA Settings (Relative paths) -->
+    <!-- PWA Settings -->
     <link rel="manifest" href="./assets/manifest-uOfoNorv.json">
     <meta name="theme-color" content="#4f46e5">
+    
+    <!-- iOS Specifics -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="MediGestión">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3063/3063822.png">
     
+    <!-- Preconnect to external services for speed -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdn-icons-png.flaticon.com">
+
     <script>
+      // Register Service Worker for Offline support
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          // Register SW with relative path
           navigator.serviceWorker.register('./sw.js')
-            .then(registration => {
-              console.log('SW registered');
-            })
-            .catch(registrationError => {
-              console.log('SW registration failed');
-            });
+            .then(registration => console.log('SW registered'))
+            .catch(err => console.log('SW registration failed', err));
         });
       }
     </script>
 
-  <script type="importmap">
+<script type="importmap">
 {
   "imports": {
     "react": "https://esm.sh/react@^19.2.4",
@@ -42,12 +45,12 @@
   }
 }
 </script>
-  <script type="module" crossorigin src="./assets/index-D6irVsh1.js"></script>
-  <link rel="modulepreload" crossorigin href="./assets/vendor-C9R8XwLk.js">
-  <link rel="modulepreload" crossorigin href="./assets/genai-B38N3RjV.js">
-  <link rel="stylesheet" crossorigin href="./assets/index-ZekMxeY2.css">
+  <script type="module" crossorigin src="./assets/index-Ct56X9Ft.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/vendor-CX6XV6_m.js">
+  <link rel="modulepreload" crossorigin href="./assets/ai-Dt9x9EAu.js">
+  <link rel="stylesheet" crossorigin href="./assets/index-DrulNzEh.css">
 </head>
-  <body class="text-slate-900 font-sans antialiased selection:bg-primary-100 selection:text-primary-700">
+  <body class="text-slate-900 font-sans antialiased selection:bg-primary-100 selection:text-primary-700 bg-slate-50 overscroll-none">
     <div id="root"></div>
   </body>
 </html>
