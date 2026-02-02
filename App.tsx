@@ -4,7 +4,8 @@ import { Treatment, HistoryLog, UserProfile } from './types';
 import { Navigation } from './components/Navigation';
 import { AddTreatmentModal } from './components/AddTreatmentModal';
 import { ConfirmActionModal } from './components/ConfirmActionModal';
-import { Check, X, Clock, AlertCircle, Trash2, Droplets, Pill, Calendar, User as UserIcon, LogOut, BellRing, Smartphone, CalendarDays, CheckCircle2, Share, Lock, Mail, Loader2, ArrowRight } from 'lucide-react';
+import { EditTreatmentModal } from './components/EditTreatmentModal';
+import { Check, X, Clock, AlertCircle, Trash2, Droplets, Pill, Calendar, User as UserIcon, LogOut, BellRing, Smartphone, CalendarDays, CheckCircle2, Share, Lock, Mail, Loader2, ArrowRight, Pencil } from 'lucide-react';
 
 // --- Helper Functions ---
 const formatTime = (timestamp: number) => {
@@ -78,7 +79,6 @@ const mapHistoryFromDB = (h: any): HistoryLog => ({
     type: h.type
 });
 
-
 // --- Main Component ---
 
 function App() {
@@ -122,6 +122,15 @@ function App() {
     treatmentId: null,
     treatmentName: '',
     type: 'take'
+  });
+
+  // Modal for editing treatments
+  const [editModal, setEditModal] = useState<{
+    isOpen: boolean;
+    treatment: Treatment | null;
+  }>({
+    isOpen: false,
+    treatment: null
   });
 
   // --- Initialization ---
@@ -306,20 +315,13 @@ function App() {
   const handleSaveTreatment = async (data: any) => {
     if (!session || !supabase) return;
 
-    // Optimistic UI update logic is tricky with generated IDs from DB. 
-    // We will just fetch after insert for simplicity in this version, 
-    // or use a temp ID. Let's send to DB and wait.
-    
-    // Convert generic data to App Treatment object structure for mapping
-    // We don't have an ID yet, DB generates it.
-    
     const dbPayload = {
         user_id: session.user.id,
         name: data.name,
         type: data.type,
         description: data.description,
         frequency_hours: data.frequencyHours,
-        next_scheduled_time: data.startDate, // Initial start
+        next_scheduled_time: data.startDate,
         start_date: data.startDate,
         active: true
     };
@@ -485,6 +487,59 @@ function App() {
       }
   };
 
+  const handleEditTreatment = (treatment: Treatment) => {
+    setEditModal({
+      isOpen: true,
+      treatment: treatment
+    });
+  };
+
+  const handleSaveEdit = async (treatmentId: string, data: any) => {
+    if (!session || !supabase) return;
+
+    // Actualización optimista en UI
+    setTreatments(prev => prev.map(t => 
+      t.id === treatmentId 
+        ? {
+            ...t,
+            name: data.name,
+            type: data.type,
+            description: data.description,
+            frequencyHours: data.frequencyHours,
+            nextScheduledTime: data.nextScheduledTime
+          }
+        : t
+    ));
+
+    // Sincronizar con base de datos
+    try {
+      await supabase
+        .from('treatments')
+        .update({
+          name: data.name,
+          type: data.type,
+          description: data.description,
+          frequency_hours: data.frequencyHours,
+          next_scheduled_time: data.nextScheduledTime
+        })
+        .eq('id', treatmentId);
+
+      setToast({ 
+        message: 'Tratamiento actualizado correctamente', 
+        type: 'success' 
+      });
+    } catch (error) {
+      console.error('Error actualizando tratamiento:', error);
+      setToast({ 
+        message: 'Error al actualizar. Inténtalo de nuevo.', 
+        type: 'error' 
+      });
+      // Recargar datos en caso de error
+      fetchData(session.user.id);
+    }
+
+    setEditModal({ isOpen: false, treatment: null });
+  };
 
   // --- Views ---
 
@@ -638,6 +693,13 @@ function App() {
                     <div key={t.id} className={`relative group p-5 rounded-2xl shadow-soft border border-slate-100 transition-all hover:-translate-y-1 hover:shadow-lg ${bgClass} ${borderClass}`}>
                         <div className="flex justify-between items-start mb-5">
                             <div className="flex items-center gap-4">
+                                <button
+                                  onClick={() => handleEditTreatment(t)}
+                                  className="p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                                  title="Editar tratamiento"
+                                >
+                                  <Pencil className="w-5 h-5" />
+                                </button>
                                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm ${t.type === 'medication' ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}>
                                     {t.type === 'medication' ? <Pill className="w-7 h-7" /> : <Droplets className="w-7 h-7" />}
                                 </div>
@@ -836,6 +898,13 @@ function App() {
         treatmentName={actionModal.treatmentName}
         actionType={actionModal.type}
         scheduledTime={actionModal.scheduledTime}
+      />
+
+      <EditTreatmentModal
+        isOpen={editModal.isOpen}
+        onClose={() => setEditModal({ isOpen: false, treatment: null })}
+        onSave={handleSaveEdit}
+        treatment={editModal.treatment}
       />
 
       {/* Global Toast */}

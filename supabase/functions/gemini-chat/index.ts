@@ -18,25 +18,39 @@ Devuelve un array JSON con todos los items encontrados.
 `;
 
 serve(async (req) => {
+  console.log('Function invoked')
+  
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
     const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')
+    console.log('API Key exists:', !!GEMINI_API_KEY)
     
     if (!GEMINI_API_KEY) {
+      console.error('GEMINI_API_KEY not configured')
       throw new Error('GEMINI_API_KEY no configurada')
     }
 
-    const { base64Image } = await req.json()
+    const body = await req.json()
+    console.log('Request body received:', Object.keys(body))
+    
+    const { base64Image } = body
+
+    if (!base64Image) {
+      console.error('No base64Image in request')
+      throw new Error('No se recibió imagen')
+    }
 
     // Limpiar base64
     const cleanBase64 = base64Image.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, "")
+    console.log('Image size (chars):', cleanBase64.length)
 
     // Llamar a Gemini API con imagen
+    console.log('Calling Gemini API...')
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: {
@@ -80,13 +94,21 @@ serve(async (req) => {
       }
     )
 
+    console.log('Gemini response status:', response.status)
     const data = await response.json()
     
     if (!response.ok) {
+      console.error('Gemini API Error:', JSON.stringify(data))
       throw new Error(data.error?.message || 'Error en Gemini API')
     }
 
-    const text = data.candidates[0].content.parts[0].text
+    console.log('Gemini response received successfully')
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+
+    if (!text) {
+      console.error('No text in response:', JSON.stringify(data))
+      throw new Error('No se pudo extraer texto de la respuesta')
+    }
 
     return new Response(
       JSON.stringify({ response: text }),
@@ -99,6 +121,7 @@ serve(async (req) => {
     )
 
   } catch (error) {
+    console.error('Error in function:', error.message, error.stack)
     return new Response(
       JSON.stringify({ error: error.message }),
       { 
