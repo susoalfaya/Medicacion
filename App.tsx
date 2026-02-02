@@ -1,12 +1,16 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
+import React, { useState, useEffect, useCallback } from 'react';
+import { createClient, User } from '@supabase/supabase-js';
 import { Treatment, HistoryLog, UserProfile } from './types';
 import { Navigation } from './components/Navigation';
 import { AddTreatmentModal } from './components/AddTreatmentModal';
 import { ConfirmActionModal } from './components/ConfirmActionModal';
 import { EditTreatmentModal } from './components/EditTreatmentModal';
 import { EditHistoryModal } from './components/EditHistoryModal';
-import { Check, X, Clock, AlertCircle, Trash2, Droplets, Pill, Calendar, User as UserIcon, LogOut, BellRing, Smartphone, CalendarDays, CheckCircle2, Share, Lock, Mail, Loader2, ArrowRight, Pencil } from 'lucide-react';
+import { DailyStats } from './components/DailyStats';
+import { TreatmentCard } from './components/TreatmentCard';
+import { AdherenceChart } from './components/AdherenceChart';
+import { Confetti } from './components/Confetti';
+import { Check, X, Clock, AlertCircle, Trash2, Calendar, User as UserIcon, LogOut, Smartphone, CalendarDays, CheckCircle2, Share, Lock, Mail, Loader2, ArrowRight, Pencil, Pill, Droplets } from 'lucide-react';
 
 // --- Helper Functions ---
 const formatTime = (timestamp: number) => {
@@ -28,14 +32,11 @@ const getGreeting = () => {
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
 
-// Only create client if keys exist to avoid crashes, handle errors in UI
 const supabase = (supabaseUrl && supabaseKey) 
   ? createClient(supabaseUrl, supabaseKey) 
   : null;
 
 // --- DB Mapping Helpers ---
-// Maps camelCase (App) <-> snake_case (DB)
-
 const mapTreatmentToDB = (t: Treatment, userId: string) => ({
     user_id: userId,
     name: t.name,
@@ -81,13 +82,12 @@ const mapHistoryFromDB = (h: any): HistoryLog => ({
 });
 
 // --- Main Component ---
-
 function App() {
   // --- State ---
   const [session, setSession] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [authLoading, setAuthLoading] = useState(false); // For login/register buttons
-  const [initialLoading, setInitialLoading] = useState(true); // For app startup
+  const [authLoading, setAuthLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -100,6 +100,7 @@ function App() {
 
   // UI Feedback
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'info' | 'warning' | 'error', action?: { label: string, onClick: () => void } } | null>(null);
+  const [showConfetti, setShowConfetti] = useState(false);
 
   // Auth Form State
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
@@ -111,7 +112,7 @@ function App() {
   const [treatments, setTreatments] = useState<Treatment[]>([]);
   const [history, setHistory] = useState<HistoryLog[]>([]);
   
-  // Modal for confirming actions
+  // Modal states
   const [actionModal, setActionModal] = useState<{
     isOpen: boolean;
     treatmentId: string | null;
@@ -125,7 +126,6 @@ function App() {
     type: 'take'
   });
 
-  // Modal for editing treatments
   const [editModal, setEditModal] = useState<{
     isOpen: boolean;
     treatment: Treatment | null;
@@ -134,7 +134,6 @@ function App() {
     treatment: null
   });
 
-  // Modal for editing history
   const [editHistoryModal, setEditHistoryModal] = useState<{
     isOpen: boolean;
     log: HistoryLog | null;
@@ -144,26 +143,23 @@ function App() {
   });
 
   // --- Initialization ---
-
   useEffect(() => {
     if (!supabase) {
         setInitialLoading(false);
         return;
     }
 
-    // Check active session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session?.user) fetchUserProfile(session.user);
       setInitialLoading(false);
     });
 
-    // Listen for changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session?.user) {
           fetchUserProfile(session.user);
-          fetchData(session.user.id); // Fetch data immediately on login
+          fetchData(session.user.id);
       } else {
           setUserProfile(null);
           setTreatments([]);
@@ -177,7 +173,6 @@ function App() {
   const fetchUserProfile = async (user: User) => {
       if (!supabase) return;
       try {
-          // First check metadata (fastest)
           if (user.user_metadata?.full_name) {
               setUserProfile({
                   id: user.id,
@@ -186,7 +181,6 @@ function App() {
               });
           }
 
-          // Then ensure DB profile exists/is up to date
           const { data, error } = await supabase
             .from('profiles')
             .select('*')
@@ -215,8 +209,7 @@ function App() {
       if (!hError && hData) setHistory(hData.map(mapHistoryFromDB));
   };
 
-
-  // --- Install Prompt & Standalone Detection ---
+  // --- Install Prompt ---
   useEffect(() => {
     const isInStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone || document.referrer.includes('android-app://');
     setIsStandalone(isInStandaloneMode);
@@ -254,7 +247,6 @@ function App() {
       }
   }, [toast]);
 
-  // Check for due medicines every 15s
   useEffect(() => {
     const interval = setInterval(() => {
       if (!session) return;
@@ -263,7 +255,7 @@ function App() {
 
       myTreatments.forEach(t => {
         const diff = t.nextScheduledTime - now;
-        if (diff > -60000 && diff < 300000) { // Window: 1 min past to 5 mins future
+        if (diff > -60000 && diff < 300000) {
            if (Notification.permission === 'granted' && Math.abs(diff) < 15000) { 
              new Notification(`Hora de tu ${t.type === 'medication' ? 'medicamento' : 'cura'}`, {
                body: `Te toca: ${t.name}. ${t.description || ''}`,
@@ -277,13 +269,11 @@ function App() {
     return () => clearInterval(interval);
   }, [treatments, session]);
 
-
   // --- Auth Handlers ---
-
   const handleAuth = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!supabase) {
-          alert("Error: Supabase no está configurado. Revisa las variables de entorno.");
+          alert("Error: Supabase no está configurado.");
           return;
       }
       setAuthLoading(true);
@@ -305,7 +295,6 @@ function App() {
                   password
               });
               if (error) throw error;
-              // Session listener will handle the rest
           }
       } catch (error: any) {
           setToast({ message: error.message || 'Error de autenticación', type: 'error' });
@@ -319,9 +308,7 @@ function App() {
       setActiveTab('dashboard');
   };
 
-
-  // --- Logic ---
-
+  // --- Treatment Logic ---
   const handleSaveTreatment = async (data: any) => {
     if (!session || !supabase) return;
 
@@ -343,7 +330,7 @@ function App() {
         .single();
 
     if (error) {
-        setToast({ message: 'Error al guardar. Inténtalo de nuevo.', type: 'error' });
+        setToast({ message: 'Error al guardar.', type: 'error' });
         console.error(error);
         return;
     }
@@ -381,11 +368,10 @@ function App() {
       
       myTreatments.forEach(t => {
           let nextTime = t.nextScheduledTime;
-          // Start from now or slightly past
           while(nextTime < now.getTime()) {
               nextTime += t.frequencyHours * 3600000;
           }
-          const endDate = now.getTime() + (14 * 24 * 60 * 60 * 1000); // 14 days
+          const endDate = now.getTime() + (14 * 24 * 60 * 60 * 1000);
 
           while (nextTime < endDate) {
               const startDate = new Date(nextTime);
@@ -431,16 +417,12 @@ function App() {
     let timeShiftDetected = false;
 
     if (action === 'take') {
-      // Calcular siguiente toma desde la hora en que se tomó (ajuste por retraso)
       nextTime = specificTimestamp + (treatment.frequencyHours * 60 * 60 * 1000);
       
       const diff = Math.abs(specificTimestamp - treatment.nextScheduledTime);
       if (diff > 15 * 60 * 1000 && treatment.frequencyHours > 0) {
           timeShiftDetected = true;
           
-          // Si hubo retraso significativo, actualizar también el startDate
-          // para mantener el nuevo ciclo ajustado
-          const newCycleBase = new Date(specificTimestamp);
           await supabase
             .from('treatments')
             .update({ start_date: specificTimestamp })
@@ -450,18 +432,15 @@ function App() {
       nextTime = treatment.nextScheduledTime + (treatment.frequencyHours * 60 * 60 * 1000);
     }
 
-    // Optimistic Update
     const updatedTreatment = { 
       ...treatment, 
       nextScheduledTime: nextTime,
-      // Si hubo retraso, actualizar también startDate
       ...(timeShiftDetected && action === 'take' ? { startDate: specificTimestamp } : {})
     };
     setTreatments(prev => prev.map(t => t.id === treatmentId ? updatedTreatment : t));
     
-    // Log history locally for immediate feedback
     const tempHistoryLog: HistoryLog = {
-        id: Math.random().toString(), // Temp ID
+        id: Math.random().toString(),
         treatmentId: treatment.id,
         treatmentName: treatment.name,
         userId: session.user.id,
@@ -472,7 +451,6 @@ function App() {
     };
     setHistory(h => [tempHistoryLog, ...h]);
 
-    // DB Sync
     try {
         await supabase.from('treatments')
             .update({ next_scheduled_time: nextTime })
@@ -480,17 +458,34 @@ function App() {
 
         const { data: insertedLog } = await supabase.from('history').insert(mapHistoryToDB(tempHistoryLog, session.user.id)).select().single();
         if (insertedLog) {
-            // Replace temp log with real one
             setHistory(h => h.map(x => x.id === tempHistoryLog.id ? mapHistoryFromDB(insertedLog) : x));
         }
 
     } catch(e) {
         console.error("Sync error", e);
-        setToast({ message: 'Error de conexión. Se reintentará.', type: 'warning' });
+        setToast({ message: 'Error de conexión.', type: 'warning' });
     }
 
     setActionModal(prev => ({ ...prev, isOpen: false, treatmentId: null }));
     
+    // Verificar si completamos todas las tomas del día
+    if (action === 'take') {
+      const endOfDay = new Date();
+      endOfDay.setHours(23, 59, 59, 999);
+      
+      const remainingToday = treatments.filter(t => 
+        t.active && 
+        t.id !== treatmentId &&
+        t.nextScheduledTime < endOfDay.getTime() && 
+        t.nextScheduledTime > Date.now()
+      ).length;
+      
+      if (remainingToday === 0) {
+        setShowConfetti(true);
+        setTimeout(() => setShowConfetti(false), 4000);
+      }
+    }
+
     if (timeShiftDetected) {
         setToast({
             message: 'Horario reprogramado.',
@@ -503,18 +498,15 @@ function App() {
 
   }, [session, actionModal, treatments]);
 
-
   const handleToggleActive = async (treatment: Treatment) => {
       if(!supabase) return;
       
-      const action = treatment.active ? 'desactivar' : 'reactivar';
       const confirmMsg = treatment.active 
         ? '¿Dar de baja este tratamiento? El historial se conservará.'
         : '¿Reactivar este tratamiento?';
       
       if(!confirm(confirmMsg)) return;
 
-      // Actualización optimista
       setTreatments(prev => prev.map(t => 
         t.id === treatment.id 
           ? { ...t, active: !t.active }
@@ -532,21 +524,18 @@ function App() {
           type: 'success' 
         });
       } catch (error) {
-        console.error('Error actualizando tratamiento:', error);
-        setToast({ 
-          message: 'Error al actualizar', 
-          type: 'error' 
-        });
+        console.error('Error:', error);
+        setToast({ message: 'Error al actualizar', type: 'error' });
         fetchData(session.user.id);
       }
   };
 
   const handleDeletePermanent = async (id: string) => {
       if(!supabase) return;
-      if(confirm('⚠️ ELIMINAR PERMANENTEMENTE (incluyendo historial)?\nEsto no se puede deshacer.')) {
+      if(confirm('⚠️ ELIMINAR PERMANENTEMENTE?\nEsto no se puede deshacer.')) {
           setTreatments(prev => prev.filter(t => t.id !== id));
           await supabase.from('treatments').delete().eq('id', id);
-          setToast({ message: 'Tratamiento eliminado permanentemente', type: 'info' });
+          setToast({ message: 'Eliminado permanentemente', type: 'info' });
       }
   };
 
@@ -560,7 +549,6 @@ function App() {
   const handleSaveEdit = async (treatmentId: string, data: any) => {
     if (!session || !supabase) return;
 
-    // Actualización optimista en UI
     setTreatments(prev => prev.map(t => 
       t.id === treatmentId 
         ? {
@@ -575,7 +563,6 @@ function App() {
         : t
     ));
 
-    // Sincronizar con base de datos
     try {
       await supabase
         .from('treatments')
@@ -589,17 +576,10 @@ function App() {
         })
         .eq('id', treatmentId);
 
-      setToast({ 
-        message: 'Tratamiento actualizado correctamente', 
-        type: 'success' 
-      });
+      setToast({ message: 'Actualizado correctamente', type: 'success' });
     } catch (error) {
-      console.error('Error actualizando tratamiento:', error);
-      setToast({ 
-        message: 'Error al actualizar. Inténtalo de nuevo.', 
-        type: 'error' 
-      });
-      // Recargar datos en caso de error
+      console.error('Error:', error);
+      setToast({ message: 'Error al actualizar', type: 'error' });
       fetchData(session.user.id);
     }
 
@@ -612,30 +592,22 @@ function App() {
     const hoursAgo = timeDiff / (1000 * 60 * 60);
 
     if (hoursAgo > 24) {
-      setToast({ 
-        message: 'Solo puedes editar registros de las últimas 24 horas', 
-        type: 'warning' 
-      });
+      setToast({ message: 'Solo puedes editar registros de las últimas 24 horas', type: 'warning' });
       return;
     }
 
-    setEditHistoryModal({
-      isOpen: true,
-      log: log
-    });
+    setEditHistoryModal({ isOpen: true, log: log });
   };
 
   const handleSaveHistoryEdit = async (logId: string, data: { actualTime: number; status: 'taken' | 'skipped' }) => {
     if (!session || !supabase) return;
 
-    // Actualización optimista en UI
     setHistory(prev => prev.map(log => 
       log.id === logId 
         ? { ...log, actualTime: data.actualTime, status: data.status }
         : log
     ));
 
-    // Sincronizar con base de datos
     try {
       await supabase
         .from('history')
@@ -645,16 +617,10 @@ function App() {
         })
         .eq('id', logId);
 
-      setToast({ 
-        message: 'Registro actualizado correctamente', 
-        type: 'success' 
-      });
+      setToast({ message: 'Registro actualizado', type: 'success' });
     } catch (error) {
-      console.error('Error actualizando historial:', error);
-      setToast({ 
-        message: 'Error al actualizar. Inténtalo de nuevo.', 
-        type: 'error' 
-      });
+      console.error('Error:', error);
+      setToast({ message: 'Error al actualizar', type: 'error' });
       fetchData(session.user.id);
     }
 
@@ -665,43 +631,30 @@ function App() {
     if (!supabase) return;
 
     const now = Date.now();
-    const timeDiff = now - logTime;
-    const hoursAgo = timeDiff / (1000 * 60 * 60);
+    const hoursAgo = (now - logTime) / (1000 * 60 * 60);
 
     if (hoursAgo > 24) {
-      setToast({ 
-        message: 'Solo puedes eliminar registros de las últimas 24 horas', 
-        type: 'warning' 
-      });
+      setToast({ message: 'Solo puedes eliminar registros de las últimas 24 horas', type: 'warning' });
       return;
     }
 
     if (!confirm('¿Seguro que quieres eliminar este registro?')) return;
 
-    // Actualización optimista
     setHistory(prev => prev.filter(log => log.id !== logId));
 
     try {
       await supabase.from('history').delete().eq('id', logId);
-      setToast({ 
-        message: 'Registro eliminado', 
-        type: 'success' 
-      });
+      setToast({ message: 'Registro eliminado', type: 'success' });
     } catch (error) {
-      console.error('Error eliminando historial:', error);
-      setToast({ 
-        message: 'Error al eliminar', 
-        type: 'error' 
-      });
+      console.error('Error:', error);
+      setToast({ message: 'Error al eliminar', type: 'error' });
       fetchData(session.user.id);
     }
   };
 
   // --- Views ---
-
   const renderAuthScreen = () => (
       <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-white flex flex-col items-center justify-center p-6 relative overflow-hidden">
-          {/* Decorative Background */}
           <div className="absolute top-[-10%] right-[-10%] w-96 h-96 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
           <div className="absolute bottom-[-10%] left-[-10%] w-96 h-96 bg-indigo-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
 
@@ -715,14 +668,13 @@ function App() {
               <p className="text-slate-500 text-base">Tu salud, organizada.</p>
           </div>
 
-          <div className="w-full max-w-sm bg-white/80 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-xl shadow-indigo-100/50 border border-white z-10 animate-in slide-in-from-bottom-5 duration-500">
+          <div className="w-full max-w-sm bg-white/80 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-xl shadow-indigo-100/50 border border-white z-10">
              {!supabase ? (
                  <div className="text-center space-y-4">
                      <AlertCircle className="w-10 h-10 text-rose-500 mx-auto" />
                      <h3 className="text-lg font-bold text-slate-800">Falta Configuración</h3>
                      <p className="text-sm text-slate-500">
-                        No se ha detectado la conexión a Supabase. 
-                        Por favor, configura las variables VITE_SUPABASE_URL y VITE_SUPABASE_KEY en GitHub Secrets o en tu archivo .env.
+                        No se ha detectado la conexión a Supabase.
                      </p>
                  </div>
              ) : (
@@ -803,115 +755,61 @@ function App() {
       .filter(t => t.active)
       .sort((a, b) => a.nextScheduledTime - b.nextScheduledTime);
 
-    const now = Date.now();
-
     return (
       <div className="space-y-8 pb-24 md:pb-8 animate-fade-in">
-        <header className="flex justify-between items-end">
-          <div>
-              <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight">
-                {getGreeting()}, <span className="text-primary-600">{userProfile?.name.split(' ')[0]}</span>
-              </h1>
-              <p className="text-slate-500 mt-1 font-medium">
-                 Tienes <span className="text-slate-800 font-bold">{myTreatments.length}</span> pautas activas.
-              </p>
-          </div>
+        <header>
+          <h1 className="text-4xl font-black text-slate-900 tracking-tight mb-2">
+            {getGreeting()}, <span className="bg-gradient-to-r from-primary-600 to-indigo-600 bg-clip-text text-transparent">{userProfile?.name.split(' ')[0]}</span>
+          </h1>
+          <p className="text-slate-500 text-lg font-medium">
+            Gestiona tu medicación de forma sencilla
+          </p>
         </header>
 
+        <DailyStats treatments={myTreatments} history={history} />
+
+        {history.length > 0 && (
+          <AdherenceChart history={history} />
+        )}
+
         {myTreatments.length > 0 ? (
-          <div className="space-y-5">
+          <div className="space-y-6">
             <div className="flex items-center justify-between px-1">
-                <h3 className="text-lg font-bold text-slate-700 flex items-center gap-2">
-                    <BellRing className="w-5 h-5 text-primary-500" />
-                    Próximas tomas
-                </h3>
-                <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-md">{formatDate(now)}</span>
+              <h3 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
+                <div className="w-1 h-8 bg-gradient-to-b from-primary-500 to-indigo-500 rounded-full"></div>
+                Próximas tomas
+              </h3>
             </div>
             
-            <div className="grid gap-4">
-            {myTreatments.map((t) => {
-                const isOverdue = t.nextScheduledTime < now;
-                const isDueSoon = t.nextScheduledTime < now + 3600000;
-                
-                let borderClass = 'border-l-4 border-l-slate-200';
-                let bgClass = 'bg-white';
-                if (isOverdue) {
-                    borderClass = 'border-l-4 border-l-rose-500';
-                    bgClass = 'bg-rose-50/30';
-                } else if (isDueSoon) {
-                    borderClass = 'border-l-4 border-l-amber-400';
-                    bgClass = 'bg-amber-50/30';
-                } else {
-                    borderClass = 'border-l-4 border-l-primary-400';
-                }
-
-                return (
-                    <div key={t.id} className={`relative group p-5 rounded-2xl shadow-soft border border-slate-100 transition-all hover:-translate-y-1 hover:shadow-lg ${bgClass} ${borderClass}`}>
-                        <div className="flex justify-between items-start mb-5">
-                            <div className="flex items-center gap-4">
-                                <button
-                                  onClick={() => handleEditTreatment(t)}
-                                  className="p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
-                                  title="Editar tratamiento"
-                                >
-                                  <Pencil className="w-5 h-5" />
-                                </button>
-                                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm ${t.type === 'medication' ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                                    {t.type === 'medication' ? <Pill className="w-7 h-7" /> : <Droplets className="w-7 h-7" />}
-                                </div>
-                                <div>
-                                    <h4 className="font-bold text-slate-800 text-xl leading-tight">{t.name}</h4>
-                                    <p className="text-slate-500 font-medium text-sm mt-0.5">{t.description || 'Seguir pauta médica'}</p>
-                                </div>
-                            </div>
-                            <div className={`flex flex-col items-end`}>
-                                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold shadow-sm ${isOverdue ? 'bg-rose-100 text-rose-700' : isDueSoon ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
-                                    <Clock className="w-3.5 h-3.5" />
-                                    {formatTime(t.nextScheduledTime)}
-                                </div>
-                                {isOverdue && <span className="text-[10px] font-bold text-rose-500 mt-1">RETRASADO</span>}
-                            </div>
-                        </div>
-
-                        <div className="flex gap-3 mt-4 pt-4 border-t border-slate-100/50">
-                            <button 
-                                onClick={() => initiateAction(t, 'skip')}
-                                className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 hover:text-slate-800 transition-colors flex items-center justify-center gap-2"
-                            >
-                                <X className="w-4 h-4" />
-                                Saltar
-                            </button>
-                            <button 
-                                onClick={() => initiateAction(t, 'take')}
-                                className="flex-[2] py-3 rounded-xl bg-gradient-to-r from-primary-600 to-indigo-600 text-white font-bold text-sm shadow-md shadow-primary-200 hover:shadow-lg hover:from-primary-500 hover:to-indigo-500 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-                            >
-                                <Check className="w-4 h-4" />
-                                Marcar como Tomado
-                            </button>
-                            <button 
-                                onClick={() => handleToggleActive(t)} 
-                                className="w-12 flex items-center justify-center text-slate-300 hover:text-amber-500 hover:bg-amber-50 rounded-xl transition-all"
-                                title="Dar de baja"
-                            >
-                                <AlertCircle className="w-5 h-5" />
-                            </button>
-                        </div>
-                    </div>
-                );
-            })}
+            <div className="grid gap-5 md:grid-cols-2">
+              {myTreatments.map((t) => (
+                <TreatmentCard
+                  key={t.id}
+                  treatment={t}
+                  onTake={() => initiateAction(t, 'take')}
+                  onSkip={() => initiateAction(t, 'skip')}
+                  onEdit={() => handleEditTreatment(t)}
+                  onDeactivate={() => handleToggleActive(t)}
+                />
+              ))}
             </div>
           </div>
         ) : (
-             <div className="flex flex-col items-center justify-center py-20 text-center">
-                 <div className="bg-gradient-to-tr from-slate-100 to-slate-200 w-24 h-24 rounded-full flex items-center justify-center mb-6 shadow-inner">
-                     <Calendar className="w-10 h-10 text-slate-400" />
-                 </div>
-                 <h3 className="text-xl font-bold text-slate-800 mb-2">Todo despejado</h3>
-                 <p className="text-slate-500 max-w-xs mx-auto mb-8">No tienes tratamientos programados. ¡Añade uno!</p>
-                 <button onClick={() => setShowAddModal(true)} className="px-6 py-3 bg-white border border-slate-200 rounded-xl font-semibold text-primary-600 shadow-sm hover:bg-slate-50 transition-colors">
-                    Añadir Tratamiento
-                 </button>
-             </div>
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="bg-gradient-to-br from-indigo-100 to-purple-100 w-32 h-32 rounded-full flex items-center justify-center mb-8 shadow-inner">
+              <Calendar className="w-16 h-16 text-indigo-400" />
+            </div>
+            <h3 className="text-2xl font-bold text-slate-800 mb-3">¡Todo listo!</h3>
+            <p className="text-slate-500 max-w-sm mx-auto mb-8 text-lg">
+              No tienes tratamientos programados.<br />¿Quieres añadir uno?
+            </p>
+            <button 
+              onClick={() => setShowAddModal(true)} 
+              className="px-8 py-4 bg-gradient-to-r from-primary-600 to-indigo-600 text-white font-bold rounded-2xl shadow-xl shadow-primary-200 hover:shadow-2xl hover:from-primary-500 hover:to-indigo-500 transition-all active:scale-95"
+            >
+              Añadir Tratamiento
+            </button>
+          </div>
         )}
       </div>
     );
@@ -1006,7 +904,7 @@ function App() {
               <div key={t.id} className="bg-white p-5 rounded-2xl shadow-soft border border-slate-100 opacity-60 hover:opacity-100 transition-all">
                 <div className="flex justify-between items-start">
                   <div className="flex items-center gap-4">
-                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm ${t.type === 'medication' ? 'bg-slate-100 text-slate-400' : 'bg-slate-100 text-slate-400'}`}>
+                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm bg-slate-100 text-slate-400">
                       {t.type === 'medication' ? <Pill className="w-7 h-7" /> : <Droplets className="w-7 h-7" />}
                     </div>
                     <div>
@@ -1031,7 +929,6 @@ function App() {
                   <button 
                     onClick={() => handleDeletePermanent(t.id)}
                     className="px-4 py-3 rounded-xl border border-rose-200 text-rose-600 font-bold text-sm hover:bg-rose-50 transition-colors flex items-center justify-center gap-2"
-                    title="Eliminar permanentemente"
                   >
                     <Trash2 className="w-4 h-4" />
                     Eliminar
@@ -1054,7 +951,7 @@ function App() {
           <div className="bg-gradient-to-br from-primary-600 to-indigo-700 rounded-3xl p-6 text-white shadow-xl shadow-indigo-200 overflow-hidden relative">
              <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-16 -mt-16 blur-3xl"></div>
              <div className="relative z-10 flex items-center gap-6">
-                 <div className={`w-20 h-20 rounded-2xl bg-white/20 backdrop-blur-md border border-white/30 flex items-center justify-center text-4xl font-bold shadow-lg`}>
+                 <div className="w-20 h-20 rounded-2xl bg-white/20 backdrop-blur-md border border-white/30 flex items-center justify-center text-4xl font-bold shadow-lg">
                     {userProfile?.name.charAt(0)}
                  </div>
                  <div>
@@ -1092,7 +989,6 @@ function App() {
   );
 
   // --- Main Render ---
-
   if (initialLoading) {
       return (
           <div className="min-h-screen bg-white flex items-center justify-center">
@@ -1162,7 +1058,8 @@ function App() {
         historyLog={editHistoryModal.log}
       />
 
-      {/* Global Toast */}
+      <Confetti show={showConfetti} />
+
       {toast && (
           <div className="fixed bottom-24 md:bottom-8 right-4 left-4 md:left-auto md:w-96 z-[80] animate-in slide-in-from-bottom-5 fade-in duration-300">
               <div className={`p-4 rounded-2xl shadow-2xl flex items-center justify-between gap-4 ${
@@ -1183,7 +1080,6 @@ function App() {
           </div>
       )}
 
-      {/* iOS Prompt */}
       {showIOSPrompt && isIOS && !isStandalone && (
           <div className="fixed bottom-4 left-4 right-4 z-[200] animate-in slide-in-from-bottom-5 md:hidden">
               <div className="bg-slate-900/95 backdrop-blur-xl text-white p-5 rounded-3xl shadow-2xl relative">
