@@ -31,4 +31,4 @@ export const analyzeRecipeImage = async (base64Image: string): Promise<ScannedMe
     console.error("Error:", error)
     throw new Error("No se pudo analizar la imagen. Inténtalo de nuevo.")
   }
-}
+} 
