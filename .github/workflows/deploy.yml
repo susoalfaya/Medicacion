@@ -40,4 +40,4 @@ jobs:
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           folder: dist
-          branch: gh-pages # Asegúrate de que esta sea la rama configurada en los settings del repo
+          branch: gh-pages # Asegúrate de que esta sea la rama configurada en los settings del repos
