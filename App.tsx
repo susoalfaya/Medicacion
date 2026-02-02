@@ -5,6 +5,7 @@ import { Navigation } from './components/Navigation';
 import { AddTreatmentModal } from './components/AddTreatmentModal';
 import { ConfirmActionModal } from './components/ConfirmActionModal';
 import { EditTreatmentModal } from './components/EditTreatmentModal';
+import { EditHistoryModal } from './components/EditHistoryModal';
 import { Check, X, Clock, AlertCircle, Trash2, Droplets, Pill, Calendar, User as UserIcon, LogOut, BellRing, Smartphone, CalendarDays, CheckCircle2, Share, Lock, Mail, Loader2, ArrowRight, Pencil } from 'lucide-react';
 
 // --- Helper Functions ---
@@ -131,6 +132,15 @@ function App() {
   }>({
     isOpen: false,
     treatment: null
+  });
+
+  // Modal for editing history
+  const [editHistoryModal, setEditHistoryModal] = useState<{
+    isOpen: boolean;
+    log: HistoryLog | null;
+  }>({
+    isOpen: false,
+    log: null
   });
 
   // --- Initialization ---
@@ -421,17 +431,32 @@ function App() {
     let timeShiftDetected = false;
 
     if (action === 'take') {
+      // Calcular siguiente toma desde la hora en que se tomó (ajuste por retraso)
       nextTime = specificTimestamp + (treatment.frequencyHours * 60 * 60 * 1000);
+      
       const diff = Math.abs(specificTimestamp - treatment.nextScheduledTime);
       if (diff > 15 * 60 * 1000 && treatment.frequencyHours > 0) {
           timeShiftDetected = true;
+          
+          // Si hubo retraso significativo, actualizar también el startDate
+          // para mantener el nuevo ciclo ajustado
+          const newCycleBase = new Date(specificTimestamp);
+          await supabase
+            .from('treatments')
+            .update({ start_date: specificTimestamp })
+            .eq('id', treatmentId);
       }
     } else {
       nextTime = treatment.nextScheduledTime + (treatment.frequencyHours * 60 * 60 * 1000);
     }
 
     // Optimistic Update
-    const updatedTreatment = { ...treatment, nextScheduledTime: nextTime };
+    const updatedTreatment = { 
+      ...treatment, 
+      nextScheduledTime: nextTime,
+      // Si hubo retraso, actualizar también startDate
+      ...(timeShiftDetected && action === 'take' ? { startDate: specificTimestamp } : {})
+    };
     setTreatments(prev => prev.map(t => t.id === treatmentId ? updatedTreatment : t));
     
     // Log history locally for immediate feedback
@@ -479,11 +504,49 @@ function App() {
   }, [session, actionModal, treatments]);
 
 
-  const handleDelete = async (id: string) => {
+  const handleToggleActive = async (treatment: Treatment) => {
       if(!supabase) return;
-      if(confirm('¿Seguro que quieres eliminar este tratamiento?')) {
+      
+      const action = treatment.active ? 'desactivar' : 'reactivar';
+      const confirmMsg = treatment.active 
+        ? '¿Dar de baja este tratamiento? El historial se conservará.'
+        : '¿Reactivar este tratamiento?';
+      
+      if(!confirm(confirmMsg)) return;
+
+      // Actualización optimista
+      setTreatments(prev => prev.map(t => 
+        t.id === treatment.id 
+          ? { ...t, active: !t.active }
+          : t
+      ));
+
+      try {
+        await supabase
+          .from('treatments')
+          .update({ active: !treatment.active })
+          .eq('id', treatment.id);
+
+        setToast({ 
+          message: treatment.active ? 'Tratamiento dado de baja' : 'Tratamiento reactivado', 
+          type: 'success' 
+        });
+      } catch (error) {
+        console.error('Error actualizando tratamiento:', error);
+        setToast({ 
+          message: 'Error al actualizar', 
+          type: 'error' 
+        });
+        fetchData(session.user.id);
+      }
+  };
+
+  const handleDeletePermanent = async (id: string) => {
+      if(!supabase) return;
+      if(confirm('⚠️ ELIMINAR PERMANENTEMENTE (incluyendo historial)?\nEsto no se puede deshacer.')) {
           setTreatments(prev => prev.filter(t => t.id !== id));
           await supabase.from('treatments').delete().eq('id', id);
+          setToast({ message: 'Tratamiento eliminado permanentemente', type: 'info' });
       }
   };
 
@@ -506,6 +569,7 @@ function App() {
             type: data.type,
             description: data.description,
             frequencyHours: data.frequencyHours,
+            startDate: data.startDate,
             nextScheduledTime: data.nextScheduledTime
           }
         : t
@@ -520,6 +584,7 @@ function App() {
           type: data.type,
           description: data.description,
           frequency_hours: data.frequencyHours,
+          start_date: data.startDate,
           next_scheduled_time: data.nextScheduledTime
         })
         .eq('id', treatmentId);
@@ -539,6 +604,97 @@ function App() {
     }
 
     setEditModal({ isOpen: false, treatment: null });
+  };
+
+  const handleEditHistory = (log: HistoryLog) => {
+    const now = Date.now();
+    const timeDiff = now - log.actualTime;
+    const hoursAgo = timeDiff / (1000 * 60 * 60);
+
+    if (hoursAgo > 24) {
+      setToast({ 
+        message: 'Solo puedes editar registros de las últimas 24 horas', 
+        type: 'warning' 
+      });
+      return;
+    }
+
+    setEditHistoryModal({
+      isOpen: true,
+      log: log
+    });
+  };
+
+  const handleSaveHistoryEdit = async (logId: string, data: { actualTime: number; status: 'taken' | 'skipped' }) => {
+    if (!session || !supabase) return;
+
+    // Actualización optimista en UI
+    setHistory(prev => prev.map(log => 
+      log.id === logId 
+        ? { ...log, actualTime: data.actualTime, status: data.status }
+        : log
+    ));
+
+    // Sincronizar con base de datos
+    try {
+      await supabase
+        .from('history')
+        .update({
+          actual_time: data.actualTime,
+          status: data.status
+        })
+        .eq('id', logId);
+
+      setToast({ 
+        message: 'Registro actualizado correctamente', 
+        type: 'success' 
+      });
+    } catch (error) {
+      console.error('Error actualizando historial:', error);
+      setToast({ 
+        message: 'Error al actualizar. Inténtalo de nuevo.', 
+        type: 'error' 
+      });
+      fetchData(session.user.id);
+    }
+
+    setEditHistoryModal({ isOpen: false, log: null });
+  };
+
+  const handleDeleteHistory = async (logId: string, logTime: number) => {
+    if (!supabase) return;
+
+    const now = Date.now();
+    const timeDiff = now - logTime;
+    const hoursAgo = timeDiff / (1000 * 60 * 60);
+
+    if (hoursAgo > 24) {
+      setToast({ 
+        message: 'Solo puedes eliminar registros de las últimas 24 horas', 
+        type: 'warning' 
+      });
+      return;
+    }
+
+    if (!confirm('¿Seguro que quieres eliminar este registro?')) return;
+
+    // Actualización optimista
+    setHistory(prev => prev.filter(log => log.id !== logId));
+
+    try {
+      await supabase.from('history').delete().eq('id', logId);
+      setToast({ 
+        message: 'Registro eliminado', 
+        type: 'success' 
+      });
+    } catch (error) {
+      console.error('Error eliminando historial:', error);
+      setToast({ 
+        message: 'Error al eliminar', 
+        type: 'error' 
+      });
+      fetchData(session.user.id);
+    }
   };
 
   // --- Views ---
@@ -733,11 +889,11 @@ function App() {
                                 Marcar como Tomado
                             </button>
                             <button 
-                                onClick={() => handleDelete(t.id)} 
-                                className="w-12 flex items-center justify-center text-slate-300 hover:text-rose-400 hover:bg-rose-50 rounded-xl transition-all"
-                                title="Eliminar"
+                                onClick={() => handleToggleActive(t)} 
+                                className="w-12 flex items-center justify-center text-slate-300 hover:text-amber-500 hover:bg-amber-50 rounded-xl transition-all"
+                                title="Dar de baja"
                             >
-                                <Trash2 className="w-5 h-5" />
+                                <AlertCircle className="w-5 h-5" />
                             </button>
                         </div>
                     </div>
@@ -761,7 +917,10 @@ function App() {
     );
   };
 
-  const renderHistory = () => (
+  const renderHistory = () => {
+      const now = Date.now();
+      
+      return (
       <div className="pb-24 md:pb-8 animate-fade-in space-y-6">
           <h2 className="text-2xl font-bold text-slate-800 px-1">Historial de Tomas</h2>
           <div className="bg-white rounded-3xl shadow-soft border border-slate-100 overflow-hidden">
@@ -772,7 +931,12 @@ function App() {
                   </div>
               ) : (
                   <div className="divide-y divide-slate-50">
-                      {history.map(log => (
+                      {history.map(log => {
+                          const timeDiff = now - log.actualTime;
+                          const hoursAgo = timeDiff / (1000 * 60 * 60);
+                          const canEdit = hoursAgo <= 24;
+
+                          return (
                           <div key={log.id} className="p-5 flex items-center justify-between hover:bg-slate-50/80 transition-colors group">
                               <div className="flex items-center gap-4">
                                   <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${log.status === 'taken' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-500'}`}>
@@ -783,19 +947,103 @@ function App() {
                                       <div className="flex items-center gap-2 mt-1">
                                           <span className="text-xs font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded text-nowrap">{formatDate(log.actualTime)}</span>
                                           <span className="text-xs font-medium text-slate-400">{formatTime(log.actualTime)}</span>
+                                          {canEdit && <span className="text-xs font-bold text-indigo-500">• Editable</span>}
                                       </div>
                                   </div>
                               </div>
-                              <span className={`px-3 py-1 rounded-full text-xs font-bold shadow-sm ${log.status === 'taken' ? 'bg-white text-emerald-600 border border-emerald-100' : 'bg-white text-rose-600 border border-rose-100'}`}>
-                                  {log.status === 'taken' ? 'Completado' : 'Omitido'}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                  <span className={`px-3 py-1 rounded-full text-xs font-bold shadow-sm ${log.status === 'taken' ? 'bg-white text-emerald-600 border border-emerald-100' : 'bg-white text-rose-600 border border-rose-100'}`}>
+                                      {log.status === 'taken' ? 'Completado' : 'Omitido'}
+                                  </span>
+                                  {canEdit && (
+                                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <button
+                                              onClick={() => handleEditHistory(log)}
+                                              className="p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                                              title="Editar"
+                                          >
+                                              <Pencil className="w-4 h-4" />
+                                          </button>
+                                          <button
+                                              onClick={() => handleDeleteHistory(log.id, log.actualTime)}
+                                              className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
+                                              title="Eliminar"
+                                          >
+                                              <Trash2 className="w-4 h-4" />
+                                          </button>
+                                      </div>
+                                  )}
+                              </div>
                           </div>
-                      ))}
+                      )})}
                   </div>
               )}
           </div>
       </div>
-  );
+      );
+  };
+
+  const renderInactiveTreatments = () => {
+    const inactiveTreatments = treatments.filter(t => !t.active);
+
+    return (
+      <div className="pb-24 md:pb-8 animate-fade-in space-y-6">
+        <div className="flex justify-between items-center px-1">
+          <h2 className="text-2xl font-bold text-slate-800">Tratamientos Inactivos</h2>
+          <span className="text-sm text-slate-500 font-medium">{inactiveTreatments.length} dados de baja</span>
+        </div>
+
+        {inactiveTreatments.length === 0 ? (
+          <div className="bg-white rounded-3xl p-12 text-center shadow-soft border border-slate-100">
+            <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle2 className="w-8 h-8 text-slate-300" />
+            </div>
+            <p className="text-slate-500 font-medium">No hay tratamientos dados de baja.</p>
+          </div>
+        ) : (
+          <div className="grid gap-4">
+            {inactiveTreatments.map((t) => (
+              <div key={t.id} className="bg-white p-5 rounded-2xl shadow-soft border border-slate-100 opacity-60 hover:opacity-100 transition-all">
+                <div className="flex justify-between items-start">
+                  <div className="flex items-center gap-4">
+                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm ${t.type === 'medication' ? 'bg-slate-100 text-slate-400' : 'bg-slate-100 text-slate-400'}`}>
+                      {t.type === 'medication' ? <Pill className="w-7 h-7" /> : <Droplets className="w-7 h-7" />}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-bold text-slate-800 text-xl">{t.name}</h4>
+                        <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-xs font-bold rounded-full">INACTIVO</span>
+                      </div>
+                      <p className="text-slate-500 font-medium text-sm mt-0.5">{t.description || 'Sin descripción'}</p>
+                      <p className="text-slate-400 text-xs mt-1">Cada {t.frequencyHours} horas</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 mt-4 pt-4 border-t border-slate-100">
+                  <button 
+                    onClick={() => handleToggleActive(t)}
+                    className="flex-1 py-3 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100 font-bold text-sm hover:bg-emerald-100 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    Reactivar
+                  </button>
+                  <button 
+                    onClick={() => handleDeletePermanent(t.id)}
+                    className="px-4 py-3 rounded-xl border border-rose-200 text-rose-600 font-bold text-sm hover:bg-rose-50 transition-colors flex items-center justify-center gap-2"
+                    title="Eliminar permanentemente"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Eliminar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const renderSettings = () => (
       <div className="pb-24 md:pb-8 animate-fade-in space-y-8">
@@ -879,7 +1127,7 @@ function App() {
       <main className="flex-1 w-full md:pl-72 transition-all duration-300">
         <div className="max-w-4xl mx-auto p-5 md:p-10">
           {activeTab === 'dashboard' && renderDashboard()}
-          {activeTab === 'treatments' && renderDashboard()} 
+          {activeTab === 'treatments' && renderInactiveTreatments()} 
           {activeTab === 'history' && renderHistory()}
           {activeTab === 'profiles' && renderSettings()}
         </div>
@@ -905,6 +1153,13 @@ function App() {
         onClose={() => setEditModal({ isOpen: false, treatment: null })}
         onSave={handleSaveEdit}
         treatment={editModal.treatment}
+      />
+
+      <EditHistoryModal
+        isOpen={editHistoryModal.isOpen}
+        onClose={() => setEditHistoryModal({ isOpen: false, log: null })}
+        onSave={handleSaveHistoryEdit}
+        historyLog={editHistoryModal.log}
       />
 
       {/* Global Toast */}

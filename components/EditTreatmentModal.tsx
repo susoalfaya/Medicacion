@@ -1,73 +1,55 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save } from 'lucide-react';
-import { Treatment, TreatmentType } from '../types';
+import { X, Save, Clock } from 'lucide-react';
+import { HistoryLog } from '../types';
 
-interface EditTreatmentModalProps {
+interface EditHistoryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (treatmentId: string, data: any) => void;
-  treatment: Treatment | null;
+  onSave: (logId: string, data: { actualTime: number; status: 'taken' | 'skipped' }) => void;
+  historyLog: HistoryLog | null;
 }
 
-export const EditTreatmentModal: React.FC<EditTreatmentModalProps> = ({ 
+export const EditHistoryModal: React.FC<EditHistoryModalProps> = ({ 
   isOpen, 
   onClose, 
   onSave, 
-  treatment 
+  historyLog 
 }) => {
   const [editForm, setEditForm] = useState({
-    name: '',
-    type: 'medication' as TreatmentType,
-    description: '',
-    frequency: '8',
-    startTime: '08:00'
+    date: '',
+    time: '',
+    status: 'taken' as 'taken' | 'skipped'
   });
 
   useEffect(() => {
-    if (treatment) {
-      // Convertir nextScheduledTime a hora local
-      const nextDate = new Date(treatment.nextScheduledTime);
-      const timeString = nextDate.toLocaleTimeString([], { 
+    if (historyLog) {
+      const logDate = new Date(historyLog.actualTime);
+      const dateString = logDate.toISOString().split('T')[0];
+      const timeString = logDate.toLocaleTimeString([], { 
         hour: '2-digit', 
         minute: '2-digit', 
         hour12: false 
       });
 
       setEditForm({
-        name: treatment.name,
-        type: treatment.type,
-        description: treatment.description || '',
-        frequency: treatment.frequencyHours.toString(),
-        startTime: timeString
+        date: dateString,
+        time: timeString,
+        status: historyLog.status
       });
     }
-  }, [treatment]);
+  }, [historyLog]);
 
-  if (!isOpen || !treatment) return null;
+  if (!isOpen || !historyLog) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editForm.name || !editForm.frequency || !editForm.startTime) return;
-
-    // Calcular la nueva hora de inicio basada en la hora actual más la hora seleccionada
-    const now = new Date();
-    const [hours, minutes] = editForm.startTime.split(':').map(Number);
     
-    // Crear fecha para hoy con la hora especificada
-    const newStartDate = new Date(now);
-    newStartDate.setHours(hours, minutes, 0, 0);
-    
-    // Si la hora ya pasó hoy, programar para mañana
-    if (newStartDate.getTime() < now.getTime()) {
-      newStartDate.setDate(newStartDate.getDate() + 1);
-    }
+    // Combinar fecha y hora
+    const newTimestamp = new Date(`${editForm.date}T${editForm.time}`).getTime();
 
-    onSave(treatment.id, {
-      name: editForm.name,
-      type: editForm.type,
-      description: editForm.description,
-      frequencyHours: parseInt(editForm.frequency),
-      nextScheduledTime: newStartDate.getTime()
+    onSave(historyLog.id, {
+      actualTime: newTimestamp,
+      status: editForm.status
     });
 
     onClose();
@@ -75,14 +57,14 @@ export const EditTreatmentModal: React.FC<EditTreatmentModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
-      <div className="bg-white rounded-[2rem] w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-white z-10">
+        <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-white">
           <div>
             <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-              Editar Tratamiento
+              Editar Registro
             </h2>
-            <p className="text-sm text-slate-500 font-medium">Modifica los detalles del tratamiento</p>
+            <p className="text-sm text-slate-500 font-medium">{historyLog.treatmentName}</p>
           </div>
           <button 
             onClick={onClose} 
@@ -93,104 +75,74 @@ export const EditTreatmentModal: React.FC<EditTreatmentModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 bg-white">
-          <form id="editForm" onSubmit={handleSubmit} className="space-y-5">
+        <div className="p-6 bg-white">
+          <form id="editHistoryForm" onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">
-                Tipo de tratamiento
+                Estado
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <label className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl cursor-pointer transition-all border ${
-                  editForm.type === 'medication' 
-                    ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm' 
-                    : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
-                }`}>
-                  <input 
-                    type="radio" 
-                    name="type" 
-                    checked={editForm.type === 'medication'} 
-                    onChange={() => setEditForm({...editForm, type: 'medication'})} 
-                    className="hidden" 
-                  />
-                  <span className="font-bold text-sm">Medicamento</span>
-                </label>
-                <label className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl cursor-pointer transition-all border ${
-                  editForm.type === 'cure' 
+                  editForm.status === 'taken' 
                     ? 'bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm' 
                     : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
                 }`}>
                   <input 
                     type="radio" 
-                    name="type" 
-                    checked={editForm.type === 'cure'} 
-                    onChange={() => setEditForm({...editForm, type: 'cure'})} 
+                    name="status" 
+                    checked={editForm.status === 'taken'} 
+                    onChange={() => setEditForm({...editForm, status: 'taken'})} 
                     className="hidden" 
                   />
-                  <span className="font-bold text-sm">Cura / Herida</span>
+                  <span className="font-bold text-sm">Tomado</span>
+                </label>
+                <label className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl cursor-pointer transition-all border ${
+                  editForm.status === 'skipped' 
+                    ? 'bg-rose-50 border-rose-200 text-rose-700 shadow-sm' 
+                    : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                }`}>
+                  <input 
+                    type="radio" 
+                    name="status" 
+                    checked={editForm.status === 'skipped'} 
+                    onChange={() => setEditForm({...editForm, status: 'skipped'})} 
+                    className="hidden" 
+                  />
+                  <span className="font-bold text-sm">Omitido</span>
                 </label>
               </div>
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 ml-1">
-                Nombre
+                Fecha
               </label>
               <input
-                type="text"
+                type="date"
                 required
-                value={editForm.name}
-                onChange={(e) => setEditForm({...editForm, name: e.target.value})}
-                placeholder={editForm.type === 'medication' ? "Ej. Paracetamol" : "Ej. Limpieza de herida"}
-                className="w-full px-5 py-3 rounded-xl bg-slate-50 border-none focus:bg-white focus:ring-2 focus:ring-primary-500 outline-none transition-all font-semibold text-slate-800 placeholder-slate-400"
+                value={editForm.date}
+                onChange={(e) => setEditForm({...editForm, date: e.target.value})}
+                className="w-full px-5 py-3 rounded-xl bg-slate-50 border-none focus:bg-white focus:ring-2 focus:ring-primary-500 outline-none transition-all font-semibold text-slate-800"
               />
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 ml-1">
-                Detalles
+                Hora
               </label>
               <input
-                type="text"
-                value={editForm.description}
-                onChange={(e) => setEditForm({...editForm, description: e.target.value})}
-                placeholder="Ej. 1 comprimido de 500mg"
-                className="w-full px-5 py-3 rounded-xl bg-slate-50 border-none focus:bg-white focus:ring-2 focus:ring-primary-500 outline-none transition-all font-medium text-slate-800 placeholder-slate-400"
+                type="time"
+                required
+                value={editForm.time}
+                onChange={(e) => setEditForm({...editForm, time: e.target.value})}
+                className="w-full px-5 py-3 rounded-xl bg-slate-50 border-none focus:bg-white focus:ring-2 focus:ring-primary-500 outline-none transition-all font-semibold text-slate-800 text-center"
               />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 ml-1">
-                  Intervalo (Horas)
-                </label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  max="168"
-                  value={editForm.frequency}
-                  onChange={(e) => setEditForm({...editForm, frequency: e.target.value})}
-                  className="w-full px-5 py-3 rounded-xl bg-slate-50 border-none focus:bg-white focus:ring-2 focus:ring-primary-500 outline-none transition-all font-semibold text-slate-800 text-center"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 ml-1">
-                  Próxima Toma
-                </label>
-                <input
-                  type="time"
-                  required
-                  value={editForm.startTime}
-                  onChange={(e) => setEditForm({...editForm, startTime: e.target.value})}
-                  className="w-full px-2 py-3 rounded-xl bg-slate-50 border-none focus:bg-white focus:ring-2 focus:ring-primary-500 outline-none transition-all font-semibold text-slate-800 text-center"
-                />
-              </div>
             </div>
 
             <div className="bg-amber-50 p-4 rounded-xl border border-amber-100">
               <p className="text-xs text-amber-800 font-medium">
-                💡 <strong>Nota:</strong> Cambiar la hora de inicio reprogramará las próximas tomas, 
-                pero mantendrá el historial de tomas anteriores.
+                <Clock className="w-4 h-4 inline mr-1" />
+                <strong>Nota:</strong> Solo puedes editar registros de las últimas 24 horas.
               </p>
             </div>
           </form>
@@ -205,7 +157,7 @@ export const EditTreatmentModal: React.FC<EditTreatmentModalProps> = ({
             Cancelar
           </button>
           <button
-            form="editForm"
+            form="editHistoryForm"
             type="submit"
             className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 rounded-2xl shadow-xl shadow-slate-200 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
           >
