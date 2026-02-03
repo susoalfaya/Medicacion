@@ -44,7 +44,7 @@ function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
-      coanst base64 = reader.result as string;
+      const base64 = reader.result as string;
       // Remover el prefijo "data:image/...;base64,"
       const base64Data = base64.split(',')[1];
       resolve(base64Data);
