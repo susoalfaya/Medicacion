@@ -101,6 +101,7 @@ function App() {
   // UI Feedback
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'info' | 'warning' | 'error', action?: { label: string, onClick: () => void } } | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
+  const [showAllTreatments, setShowAllTreatments] = useState(false);
 
   // Auth Form State
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
@@ -755,6 +756,9 @@ function App() {
       .filter(t => t.active)
       .sort((a, b) => a.nextScheduledTime - b.nextScheduledTime);
 
+    const nextTwoTreatments = myTreatments.slice(0, 2);
+    const hasMoreTreatments = myTreatments.length > 2;
+
     return (
       <div className="space-y-8 pb-24 md:pb-8 animate-fade-in">
         <header>
@@ -768,21 +772,23 @@ function App() {
 
         <DailyStats treatments={myTreatments} history={history} />
 
-        {history.length > 0 && (
-          <AdherenceChart history={history} />
-        )}
-
-        {myTreatments.length > 0 ? (
+        {/* Próximas 2 tomas */}
+        {nextTwoTreatments.length > 0 ? (
           <div className="space-y-6">
             <div className="flex items-center justify-between px-1">
               <h3 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
                 <div className="w-1 h-8 bg-gradient-to-b from-primary-500 to-indigo-500 rounded-full"></div>
                 Próximas tomas
               </h3>
+              {hasMoreTreatments && !showAllTreatments && (
+                <span className="text-sm font-semibold text-slate-400 bg-slate-100 px-3 py-1 rounded-full">
+                  +{myTreatments.length - 2} más
+                </span>
+              )}
             </div>
             
             <div className="grid gap-5 md:grid-cols-2">
-              {myTreatments.map((t) => (
+              {(showAllTreatments ? myTreatments : nextTwoTreatments).map((t) => (
                 <TreatmentCard
                   key={t.id}
                   treatment={t}
@@ -793,23 +799,42 @@ function App() {
                 />
               ))}
             </div>
+
+            {hasMoreTreatments && (
+              <div className="text-center">
+                <button 
+                  onClick={() => setShowAllTreatments(!showAllTreatments)}
+                  className="text-primary-600 font-bold text-sm hover:text-primary-700 hover:underline transition-all"
+                >
+                  {showAllTreatments 
+                    ? 'Mostrar menos ↑' 
+                    : `Ver todos los tratamientos (${myTreatments.length}) ↓`
+                  }
+                </button>
+              </div>
+            )}
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="bg-gradient-to-br from-indigo-100 to-purple-100 w-32 h-32 rounded-full flex items-center justify-center mb-8 shadow-inner">
-              <Calendar className="w-16 h-16 text-indigo-400" />
+          <div className="flex flex-col items-center justify-center py-12 text-center bg-white rounded-3xl border border-slate-100 shadow-soft">
+            <div className="bg-gradient-to-br from-indigo-100 to-purple-100 w-24 h-24 rounded-full flex items-center justify-center mb-6 shadow-inner">
+              <Calendar className="w-12 h-12 text-indigo-400" />
             </div>
-            <h3 className="text-2xl font-bold text-slate-800 mb-3">¡Todo listo!</h3>
-            <p className="text-slate-500 max-w-sm mx-auto mb-8 text-lg">
-              No tienes tratamientos programados.<br />¿Quieres añadir uno?
+            <h3 className="text-xl font-bold text-slate-800 mb-2">¡Todo listo!</h3>
+            <p className="text-slate-500 max-w-sm mx-auto mb-6">
+              No tienes tratamientos programados.
             </p>
             <button 
               onClick={() => setShowAddModal(true)} 
-              className="px-8 py-4 bg-gradient-to-r from-primary-600 to-indigo-600 text-white font-bold rounded-2xl shadow-xl shadow-primary-200 hover:shadow-2xl hover:from-primary-500 hover:to-indigo-500 transition-all active:scale-95"
+              className="px-6 py-3 bg-gradient-to-r from-primary-600 to-indigo-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl hover:from-primary-500 hover:to-indigo-500 transition-all active:scale-95"
             >
               Añadir Tratamiento
             </button>
           </div>
+        )}
+
+        {/* Gráfico de adherencia */}
+        {history.length > 0 && (
+          <AdherenceChart history={history} />
         )}
       </div>
     );
@@ -881,60 +906,42 @@ function App() {
       );
   };
 
-  const renderInactiveTreatments = () => {
-    const inactiveTreatments = treatments.filter(t => !t.active);
+  const renderAllTreatments = () => {
+    const activeTreatments = treatments
+      .filter(t => t.active)
+      .sort((a, b) => a.nextScheduledTime - b.nextScheduledTime);
 
     return (
       <div className="pb-24 md:pb-8 animate-fade-in space-y-6">
         <div className="flex justify-between items-center px-1">
-          <h2 className="text-2xl font-bold text-slate-800">Tratamientos Inactivos</h2>
-          <span className="text-sm text-slate-500 font-medium">{inactiveTreatments.length} dados de baja</span>
+          <h2 className="text-2xl font-bold text-slate-800">Todos los Tratamientos</h2>
+          <span className="text-sm text-slate-500 font-medium">{activeTreatments.length} activos</span>
         </div>
 
-        {inactiveTreatments.length === 0 ? (
+        {activeTreatments.length === 0 ? (
           <div className="bg-white rounded-3xl p-12 text-center shadow-soft border border-slate-100">
             <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle2 className="w-8 h-8 text-slate-300" />
+              <Pill className="w-8 h-8 text-slate-300" />
             </div>
-            <p className="text-slate-500 font-medium">No hay tratamientos dados de baja.</p>
+            <p className="text-slate-500 font-medium mb-6">No hay tratamientos activos.</p>
+            <button 
+              onClick={() => setShowAddModal(true)} 
+              className="px-6 py-3 bg-gradient-to-r from-primary-600 to-indigo-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all active:scale-95"
+            >
+              Añadir Tratamiento
+            </button>
           </div>
         ) : (
-          <div className="grid gap-4">
-            {inactiveTreatments.map((t) => (
-              <div key={t.id} className="bg-white p-5 rounded-2xl shadow-soft border border-slate-100 opacity-60 hover:opacity-100 transition-all">
-                <div className="flex justify-between items-start">
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm bg-slate-100 text-slate-400">
-                      {t.type === 'medication' ? <Pill className="w-7 h-7" /> : <Droplets className="w-7 h-7" />}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="font-bold text-slate-800 text-xl">{t.name}</h4>
-                        <span className="px-2 py-0.5 bg-slate-100 text-slate-500 text-xs font-bold rounded-full">INACTIVO</span>
-                      </div>
-                      <p className="text-slate-500 font-medium text-sm mt-0.5">{t.description || 'Sin descripción'}</p>
-                      <p className="text-slate-400 text-xs mt-1">Cada {t.frequencyHours} horas</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-3 mt-4 pt-4 border-t border-slate-100">
-                  <button 
-                    onClick={() => handleToggleActive(t)}
-                    className="flex-1 py-3 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100 font-bold text-sm hover:bg-emerald-100 transition-colors flex items-center justify-center gap-2"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    Reactivar
-                  </button>
-                  <button 
-                    onClick={() => handleDeletePermanent(t.id)}
-                    className="px-4 py-3 rounded-xl border border-rose-200 text-rose-600 font-bold text-sm hover:bg-rose-50 transition-colors flex items-center justify-center gap-2"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Eliminar
-                  </button>
-                </div>
-              </div>
+          <div className="grid gap-5 md:grid-cols-2">
+            {activeTreatments.map((t) => (
+              <TreatmentCard
+                key={t.id}
+                treatment={t}
+                onTake={() => initiateAction(t, 'take')}
+                onSkip={() => initiateAction(t, 'skip')}
+                onEdit={() => handleEditTreatment(t)}
+                onDeactivate={() => handleToggleActive(t)}
+              />
             ))}
           </div>
         )}

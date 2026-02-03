@@ -66,19 +66,20 @@ export const AdherenceChart: React.FC<AdherenceChartProps> = ({ history }) => {
       {/* Gráfico */}
       <div className="flex items-end justify-between gap-2 h-48 mb-4">
         {last7Days.map((day, index) => {
-          const takenHeight = day.total > 0 ? (day.taken / day.total) * maxHeight : 0;
-          const skippedHeight = day.total > 0 ? (day.skipped / day.total) * maxHeight : 0;
+          const takenHeight = day.total > 0 ? Math.max((day.taken / day.total) * 100, 5) : 0;
+          const skippedHeight = day.total > 0 ? Math.max((day.skipped / day.total) * 100, 5) : 0;
+          const hasData = day.total > 0;
 
           return (
             <div key={index} className="flex-1 flex flex-col items-center gap-2">
               {/* Barra */}
               <div className="w-full flex flex-col justify-end h-full relative group">
-                {day.total === 0 ? (
-                  <div className="w-full bg-slate-100 rounded-t-xl" style={{ height: '4px' }}></div>
+                {!hasData ? (
+                  <div className="w-full bg-slate-100 rounded-t-xl" style={{ height: '8px' }}></div>
                 ) : (
                   <>
                     {/* Tooltip */}
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-slate-900 text-white text-xs font-bold py-2 px-3 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-slate-900 text-white text-xs font-bold py-2 px-3 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
                       {day.taken}/{day.total} tomadas
                       <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1">
                         <div className="border-4 border-transparent border-t-slate-900"></div>
@@ -89,7 +90,7 @@ export const AdherenceChart: React.FC<AdherenceChartProps> = ({ history }) => {
                     {day.skipped > 0 && (
                       <div 
                         className="w-full bg-gradient-to-t from-rose-500 to-rose-400 rounded-t-xl transition-all duration-500"
-                        style={{ height: `${skippedHeight}%` }}
+                        style={{ height: `${skippedHeight}%`, minHeight: '4px' }}
                       ></div>
                     )}
                     
@@ -98,6 +99,7 @@ export const AdherenceChart: React.FC<AdherenceChartProps> = ({ history }) => {
                       className="w-full bg-gradient-to-t from-emerald-500 to-emerald-400 transition-all duration-500"
                       style={{ 
                         height: `${takenHeight}%`,
+                        minHeight: '4px',
                         borderTopLeftRadius: day.skipped === 0 ? '0.75rem' : '0',
                         borderTopRightRadius: day.skipped === 0 ? '0.75rem' : '0'
                       }}
