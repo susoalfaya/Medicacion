@@ -1,18 +1,18 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  // Load env file based on `mode` in the current working directory.
-  // Set the third parameter to '' to load all env regardless of the `VITE_` prefix.
+  // Carga las variables del .env local si existen
   const env = loadEnv(mode, process.cwd(), '');
   
   return {
     plugins: [react()],
-    base: '/Medicacion/', // ✅ CAMBIADO: Ruta absoluta para GitHub Pages
+    base: '/Medicacion/', 
     define: {
-      // Polyfill para que process.env.API_KEY funcione tanto en local (.env) como en GitHub Actions (Secrets)
-      'process.env.API_KEY': JSON.stringify(env.API_KEY || process.env.API_KEY || '')
+      // Forzamos el reemplazo de las variables de Supabase en todo el código
+      // Esto soluciona el error de "import.meta" y el 404
+      'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL),
+      'import.meta.env.VITE_SUPABASE_KEY': JSON.stringify(env.VITE_SUPABASE_KEY || process.env.VITE_SUPABASE_KEY),
     },
     build: {
       outDir: 'dist',
@@ -23,7 +23,6 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks: {
             vendor: ['react', 'react-dom', 'lucide-react', '@supabase/supabase-js'],
-            ai: ['@google/genai']
           }
         }
       }
