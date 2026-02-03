@@ -1030,7 +1030,7 @@ function App() {
       <main className="flex-1 w-full md:pl-72 transition-all duration-300">
         <div className="max-w-4xl mx-auto p-5 md:p-10">
           {activeTab === 'dashboard' && renderDashboard()}
-          {activeTab === 'treatments' && renderInactiveTreatments()} 
+          {activeTab === 'treatments' && renderAllTreatments()} 
           {activeTab === 'history' && renderHistory()}
           {activeTab === 'profiles' && renderSettings()}
         </div>
