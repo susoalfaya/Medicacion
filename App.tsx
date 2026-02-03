@@ -11,6 +11,7 @@ import { TreatmentCard } from './components/TreatmentCard';
 import { AdherenceChart } from './components/AdherenceChart';
 import { Confetti } from './components/Confetti';
 import { Check, X, Clock, AlertCircle, Trash2, Calendar, User as UserIcon, LogOut, Smartphone, CalendarDays, CheckCircle2, Share, Lock, Mail, Loader2, ArrowRight, Pencil, Pill, Droplets } from 'lucide-react';
+import { Check, X, Clock, Bell, AlertCircle, ... } from 'lucide-react';
 
 // --- Helper Functions ---
 const formatTime = (timestamp: number) => {
@@ -160,6 +161,33 @@ const cleanExpiredTreatments = async () => {
     console.error("Error al limpiar tratamientos:", error);
   }
 };
+
+// --- ESCUCHADOR DE NOTIFICACIONES ---
+  useEffect(() => {
+    const channel = new BroadcastChannel('sw-notifications');
+    channel.onmessage = (event) => {
+      if (event.data.action === 'taken') {
+        const nextT = treatments.find(t => t.active);
+        if (nextT) {
+          setActionModal({ isOpen: false, treatmentId: nextT.id, treatmentName: nextT.name, type: 'take' });
+          handleConfirmAction(Date.now());
+        }
+      }
+    };
+    return () => channel.close();
+  }, [treatments, handleConfirmAction]);
+
+// ESCUCHA DEL MÓVIL (PEGA ESTO AQUÍ)
+useEffect(() => {
+  const channel = new BroadcastChannel('sw-notifications');
+  channel.onmessage = (event) => {
+    if (event.data.action === 'taken') {
+      // Si el usuario pulsa "Tomada" en la notificación, lo procesamos
+      handleConfirmAction(Date.now()); 
+    }
+  };
+  return () => channel.close();
+}, [handleConfirmAction]);
 
 // --- Initialization ---
   useEffect(() => {
@@ -806,14 +834,29 @@ const handleSaveEdit = async (treatmentId: string, data: any) => {
 
     return (
       <div className="space-y-8 pb-24 md:pb-8 animate-fade-in">
-        <header>
+<header className="flex justify-between items-start">
+        <div>
           <h1 className="text-4xl font-black text-slate-900 tracking-tight mb-2">
             {getGreeting()}, <span className="bg-gradient-to-r from-primary-600 to-indigo-600 bg-clip-text text-transparent">{userProfile?.name.split(' ')[0]}</span>
           </h1>
-          <p className="text-slate-500 text-lg font-medium">
-            Gestiona tu medicación de forma sencilla
-          </p>
-        </header>
+          <p className="text-slate-500 text-lg font-medium">Gestiona tu medicación</p>
+        </div>
+
+        {/* BOTÓN DE LA CAMPANA */}
+        <button 
+          onClick={async () => {
+            const permission = await Notification.requestPermission();
+            if (permission === 'granted') {
+              setToast({ message: '¡Avisos activados!', type: 'success' });
+            } else {
+              alert('Por favor, activa las notificaciones en los ajustes del navegador.');
+            }
+          }}
+          className="p-3 bg-white shadow-md rounded-2xl text-indigo-600 hover:bg-indigo-50 transition-all border border-slate-100"
+        >
+          <Bell className="w-6 h-6" />
+        </button>
+      </header>
 
         <DailyStats treatments={myTreatments} history={history} />
 
