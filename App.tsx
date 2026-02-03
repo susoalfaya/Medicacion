@@ -161,27 +161,6 @@ const cleanExpiredTreatments = async () => {
   }
 };
 
-// --- ESCUCHADOR DE NOTIFICACIONES BROADCAST ---
-  useEffect(() => {
-    const channel = new BroadcastChannel('sw-notifications');
-    channel.onmessage = (event) => {
-      if (event.data.action === 'taken') {
-        const nextT = treatments.find(t => t.active);
-        if (nextT) {
-          // Configuramos el modal con el tratamiento actual y ejecutamos la acción
-          setActionModal({ 
-            isOpen: false, 
-            treatmentId: nextT.id, 
-            treatmentName: nextT.name, 
-            type: 'take',
-            scheduledTime: nextT.nextScheduledTime 
-          });
-          handleConfirmAction(Date.now());
-        }
-      }
-    };
-    return () => channel.close();
-  }, [treatments, handleConfirmAction]);
 
 // --- Initialization ---
   useEffect(() => {
@@ -331,7 +310,27 @@ const fetchData = async (userId: string) => {
     }, 15000); 
     return () => clearInterval(interval);
   }, [treatments, session]);
-
+// --- ESCUCHADOR DE NOTIFICACIONES BROADCAST ---
+  useEffect(() => {
+    const channel = new BroadcastChannel('sw-notifications');
+    channel.onmessage = (event) => {
+      if (event.data.action === 'taken') {
+        const nextT = treatments.find(t => t.active);
+        if (nextT) {
+          // Configuramos el modal con el tratamiento actual y ejecutamos la acción
+          setActionModal({ 
+            isOpen: false, 
+            treatmentId: nextT.id, 
+            treatmentName: nextT.name, 
+            type: 'take',
+            scheduledTime: nextT.nextScheduledTime 
+          });
+          handleConfirmAction(Date.now());
+        }
+      }
+    };
+    return () => channel.close();
+  }, [treatments, handleConfirmAction]);
   // --- Auth Handlers ---
   const handleAuth = async (e: React.FormEvent) => {
       e.preventDefault();
