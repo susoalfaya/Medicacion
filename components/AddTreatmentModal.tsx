@@ -27,17 +27,54 @@ export const AddTreatmentModal: React.FC<AddTreatmentModalProps> = ({ isOpen, on
 
     setIsAnalyzing(true);
     try {
+      // Llamada al servicio que invoca la Edge Function de Supabase
       const result = await analyzeMedicationImage(file);
+      
       if (result && result.length > 0) {
+        // Si hay varios medicamentos (como Omeprazol y Paracetamol del log)
+        if (result.length > 1) {
+          const confirmAdd = confirm(
+            `Se han detectado ${result.length} medicamentos:\n${result.map((m: any) => `- ${m.name}`).join('\n')}\n\n¿Deseas añadirlos todos automáticamente?`
+          );
+
+          if (confirmAdd) {
+            for (const med of result) {
+              const [hours, minutes] = formData.startTime.split(':').map(Number);
+              const startDate = new Date();
+              startDate.setHours(hours, minutes, 0, 0);
+              
+              if (startDate.getTime() < Date.now()) {
+                startDate.setDate(startDate.getDate() + 1);
+              }
+
+              onSave({
+                type: 'medication',
+                name: med.name,
+                description: med.description || '', // Mapeado desde la IA
+                frequencyHours: parseInt(med.frequencyHours?.toString() || "8"),
+                startDate: startDate.getTime(),
+                durationDays: 7,
+                active: true,
+                nextScheduledTime: startDate.getTime()
+              });
+            }
+            onClose();
+            return;
+          }
+        }
+
+        // Si solo hay uno o el usuario canceló la carga masiva, rellena el primero en el form
         const med = result[0];
         setFormData(prev => ({
           ...prev,
           name: med.name || prev.name,
-          description: med.dosage || prev.description
+          description: med.description || prev.description, // Mapeado a 'description'
+          frequencyHours: med.frequencyHours || prev.frequencyHours
         }));
       }
     } catch (error) {
-      console.error('Error analyzing image:', error);
+      console.error('Error analizando imagen:', error);
+      alert("No se pudo analizar la imagen. Verifica la conexión con Supabase.");
     } finally {
       setIsAnalyzing(false);
     }
@@ -67,6 +104,7 @@ export const AddTreatmentModal: React.FC<AddTreatmentModalProps> = ({ isOpen, on
       nextScheduledTime: startDate.getTime()
     });
 
+    // Reset del form
     setFormData({
       type: 'medication',
       name: '',
@@ -81,7 +119,6 @@ export const AddTreatmentModal: React.FC<AddTreatmentModalProps> = ({ isOpen, on
   return (
     <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
       <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-        {/* Encabezado */}
         <div className="p-6 border-b border-slate-100 flex justify-between items-center">
           <h2 className="text-xl font-bold text-slate-800">Nuevo Tratamiento</h2>
           <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
@@ -118,47 +155,52 @@ export const AddTreatmentModal: React.FC<AddTreatmentModalProps> = ({ isOpen, on
             </button>
           </div>
 
-          {/* Botón Escanear */}
+          {/* Botón Escanear con IA */}
           <label className={`flex items-center justify-center gap-2 p-3 border-2 border-dashed rounded-2xl cursor-pointer transition-all ${
             isAnalyzing ? 'bg-slate-50 border-indigo-300' : 'border-slate-100 hover:border-indigo-400 hover:bg-indigo-50/30'
           }`}>
             {isAnalyzing ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
-                <span className="font-bold text-sm text-indigo-600">Analizando...</span>
+                <span className="font-bold text-sm text-indigo-600">Analizando receta...</span>
               </>
             ) : (
               <>
                 <Camera className="w-5 h-5 text-indigo-500" />
-                <span className="font-bold text-sm text-slate-500">Escanear con IA</span>
+                <span className="font-bold text-sm text-slate-500">Escanear Receta o Caja</span>
               </>
             )}
-            <input type="file" accept="image/*" capture="environment" onChange={handleImageCapture} className="hidden" disabled={isAnalyzing} />
+            <input 
+              type="file" 
+              accept="image/*" 
+              capture="environment" 
+              onChange={handleImageCapture} 
+              className="hidden" 
+              disabled={isAnalyzing} 
+            />
           </label>
 
-          {/* Nombre y Dosis */}
           <div className="space-y-4">
             <div>
               <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Nombre</label>
               <input
                 type="text" required value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Nombre del medicamento"
+                placeholder="Ej: Omeprazol"
                 className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
               />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Dosis / Instrucciones</label>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Instrucciones (Dosis)</label>
               <input
                 type="text" value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Ej: 500mg, después de desayunar"
+                placeholder="Ej: 20mg antes del desayuno"
                 className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
               />
             </div>
           </div>
 
-          {/* Frecuencia y Hora Inicio */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Frecuencia</label>
@@ -187,9 +229,8 @@ export const AddTreatmentModal: React.FC<AddTreatmentModalProps> = ({ isOpen, on
             </div>
           </div>
 
-          {/* Duración (Nueva Sección) */}
           <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Duración</label>
+            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Duración (Días)</label>
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -198,7 +239,6 @@ export const AddTreatmentModal: React.FC<AddTreatmentModalProps> = ({ isOpen, on
                   onChange={(e) => setFormData({ ...formData, durationDays: parseInt(e.target.value) })}
                   className="w-full pl-10 pr-4 py-3 rounded-2xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium"
                 />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-300 uppercase">Días</span>
               </div>
               <button
                 type="button"
@@ -210,7 +250,6 @@ export const AddTreatmentModal: React.FC<AddTreatmentModalProps> = ({ isOpen, on
             </div>
           </div>
 
-          {/* Botones de Acción */}
           <div className="flex gap-3 pt-4">
             <button
               type="button" onClick={onClose}
