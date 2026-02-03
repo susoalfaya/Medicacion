@@ -45,7 +45,10 @@ const mapTreatmentToDB = (t: Treatment, userId: string) => ({
     frequency_hours: t.frequencyHours,
     next_scheduled_time: t.nextScheduledTime,
     start_date: t.startDate,
-    active: t.active
+    active: t.active,
+    // Nuevos campos
+    duration_days: t.durationDays,
+    end_date: t.endDate
 });
 
 const mapTreatmentFromDB = (t: any): Treatment => ({
@@ -57,7 +60,10 @@ const mapTreatmentFromDB = (t: any): Treatment => ({
     frequencyHours: t.frequency_hours,
     nextScheduledTime: parseInt(t.next_scheduled_time),
     startDate: parseInt(t.start_date),
-    active: t.active
+    active: t.active,
+    // Nuevos campos (manejando posibles nulos de la DB)
+    durationDays: t.duration_days || null,
+    endDate: t.end_date ? parseInt(t.end_date) : null
 });
 
 const mapHistoryToDB = (h: HistoryLog, userId: string) => ({
@@ -143,22 +149,43 @@ function App() {
     log: null
   });
 
-  // --- Initialization ---
+  // Añade esto antes de tus otros useEffects
+const cleanExpiredTreatments = async () => {
+  if (!supabase || !session) return;
+  
+  // rpc() sirve para ejecutar funciones SQL que creamos en el editor de Supabase
+  const { error } = await supabase.rpc('deactivate_expired_treatments');
+  
+  if (error) {
+    console.error("Error al limpiar tratamientos:", error);
+  }
+};
+
+// --- Initialization ---
   useEffect(() => {
     if (!supabase) {
         setInitialLoading(false);
         return;
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // 1. Manejo de la sesión inicial al cargar la página
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
-      if (session?.user) fetchUserProfile(session.user);
+      if (session?.user) {
+          // Limpieza y carga inicial
+          await cleanExpiredTreatments(); 
+          fetchUserProfile(session.user);
+          fetchData(session.user.id);
+      }
       setInitialLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    // 2. Escuchar cambios en la sesión (Login/Logout)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
       if (session?.user) {
+          // Cada vez que el usuario entre, "pasamos la escoba"
+          await cleanExpiredTreatments(); 
           fetchUserProfile(session.user);
           fetchData(session.user.id);
       } else {
@@ -200,15 +227,28 @@ function App() {
       }
   };
 
-  const fetchData = async (userId: string) => {
-      if (!supabase) return;
-      
-      const { data: tData, error: tError } = await supabase.from('treatments').select('*').order('created_at', { ascending: true });
-      if (!tError && tData) setTreatments(tData.map(mapTreatmentFromDB));
+const fetchData = async (userId: string) => {
+    if (!supabase) return;
+    
+    const now = Date.now();
+    // Filtramos en la consulta: activos y (sin fecha fin O fecha fin en el futuro)
+    const { data: tData, error: tError } = await supabase
+        .from('treatments')
+        .select('*')
+        .eq('active', true) 
+        .or(`end_date.is.null,end_date.gt.${now}`)
+        .order('created_at', { ascending: true });
 
-      const { data: hData, error: hError } = await supabase.from('history').select('*').order('created_at', { ascending: false }).limit(50);
-      if (!hError && hData) setHistory(hData.map(mapHistoryFromDB));
-  };
+    if (!tError && tData) setTreatments(tData.map(mapTreatmentFromDB));
+
+    const { data: hData, error: hError } = await supabase
+        .from('history')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50);
+        
+    if (!hError && hData) setHistory(hData.map(mapHistoryFromDB));
+};
 
   // --- Install Prompt ---
   useEffect(() => {
@@ -547,45 +587,50 @@ function App() {
     });
   };
 
-  const handleSaveEdit = async (treatmentId: string, data: any) => {
+const handleSaveEdit = async (treatmentId: string, data: any) => {
     if (!session || !supabase) return;
 
-    setTreatments(prev => prev.map(t => 
-      t.id === treatmentId 
-        ? {
-            ...t,
-            name: data.name,
-            type: data.type,
-            description: data.description,
-            frequencyHours: data.frequencyHours,
-            startDate: data.startDate,
-            nextScheduledTime: data.nextScheduledTime
-          }
-        : t
-    ));
+    // Buscamos el tratamiento original para no perder datos
+    const original = treatments.find(t => t.id === treatmentId);
+    if (!original) return;
+
+    const updatedTreatment: Treatment = {
+        ...original,
+        name: data.name,
+        type: data.type,
+        description: data.description,
+        frequencyHours: data.frequencyHours,
+        startDate: data.startDate,
+        nextScheduledTime: data.nextScheduledTime,
+        durationDays: data.durationDays,
+        endDate: data.endDate,
+        active: data.active // Capturamos si el modal lo desactivó por fecha
+    };
+
+    // Actualización optimista en el estado local
+    setTreatments(prev => prev.map(t => t.id === treatmentId ? updatedTreatment : t));
 
     try {
-      await supabase
-        .from('treatments')
-        .update({
-          name: data.name,
-          type: data.type,
-          description: data.description,
-          frequency_hours: data.frequencyHours,
-          start_date: data.startDate,
-          next_scheduled_time: data.nextScheduledTime
-        })
-        .eq('id', treatmentId);
+        const { error } = await supabase
+            .from('treatments')
+            .update(mapTreatmentToDB(updatedTreatment, session.user.id))
+            .eq('id', treatmentId);
 
-      setToast({ message: 'Actualizado correctamente', type: 'success' });
+        if (error) throw error;
+        setToast({ message: 'Actualizado correctamente', type: 'success' });
+        
+        // Si el tratamiento se guardó como inactivo (terminó), refrescamos la lista
+        if (!updatedTreatment.active) {
+            fetchData(session.user.id);
+        }
     } catch (error) {
-      console.error('Error:', error);
-      setToast({ message: 'Error al actualizar', type: 'error' });
-      fetchData(session.user.id);
+        console.error('Error:', error);
+        setToast({ message: 'Error al actualizar', type: 'error' });
+        fetchData(session.user.id);
     }
 
     setEditModal({ isOpen: false, treatment: null });
-  };
+};
 
   const handleEditHistory = (log: HistoryLog) => {
     const now = Date.now();
