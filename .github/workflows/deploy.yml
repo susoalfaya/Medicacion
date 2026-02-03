@@ -35,7 +35,6 @@ jobs:
         # Importante: Las variables VITE_ deben estar AQUÍ para que se inyecten en el dist
         run: npm run build
         env:
-          VITE_API_KEY: ${{ secrets.API_KEY }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_KEY: ${{ secrets.VITE_SUPABASE_KEY }}
 
