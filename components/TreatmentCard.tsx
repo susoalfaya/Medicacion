@@ -34,7 +34,7 @@ export const TreatmentCard: React.FC<TreatmentCardProps> = ({
     if (ms < 0) return 'Retrasado';
     const hours = Math.floor(Math.abs(ms) / (1000 * 60 * 60));
     const minutes = Math.floor((Math.abs(ms) % (1000 * 60 * 60)) / (1000 * 60));
-    if (hours === 0) return `en ${minutes}m`;
+    if (hours === 0) return `en   ${minutes}m`;
     return `en ${hours}h ${minutes}m`;
   };
 
