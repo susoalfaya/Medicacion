@@ -1,244 +1,188 @@
-import React, { useState, useEffect } from 'react';
-import { X, Save } from 'lucide-react';
-import { Treatment, TreatmentType } from '../types';
+import React, { useState } from 'react';
+import { Treatment } from '../types';
+import { Check, X, Clock, Pill, Droplets, Pencil, AlertCircle, Zap } from 'lucide-react';
 
-interface EditTreatmentModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSave: (treatmentId: string, data: any) => void;
-  treatment: Treatment | null;
+interface TreatmentCardProps {
+  treatment: Treatment;
+  onTake: () => void;
+  onSkip: () => void;
+  onEdit: () => void;
+  onDeactivate: () => void;
 }
 
-export const EditTreatmentModal: React.FC<EditTreatmentModalProps> = ({ 
-  isOpen, 
-  onClose, 
-  onSave, 
-  treatment 
+export const TreatmentCard: React.FC<TreatmentCardProps> = ({
+  treatment,
+  onTake,
+  onSkip,
+  onEdit,
+  onDeactivate
 }) => {
-  const [editForm, setEditForm] = useState({
-    name: '',
-    type: 'medication' as TreatmentType,
-    description: '',
-    frequency: '8',
-    cycleStartTime: '08:00', // Hora base del ciclo diario
-    nextDoseTime: '08:00'    // Próxima toma específica
-  });
+  const [isFlipped, setIsFlipped] = useState(false);
+  const now = Date.now();
+  const isOverdue = treatment.nextScheduledTime < now;
+  const timeUntil = treatment.nextScheduledTime - now;
+  const isDueSoon = timeUntil > 0 && timeUntil < 3600000; // Próxima hora
 
-  useEffect(() => {
-    if (treatment) {
-      // Hora de la próxima toma específica
-      const nextDate = new Date(treatment.nextScheduledTime);
-      const nextTimeString = nextDate.toLocaleTimeString([], { 
-        hour: '2-digit', 
-        minute: '2-digit', 
-        hour12: false 
-      });
+  // Calcular progreso hasta la próxima toma
+  const totalInterval = treatment.frequencyHours * 60 * 60 * 1000;
+  const timeSinceLastDose = totalInterval - timeUntil;
+  const progress = Math.min(Math.max((timeSinceLastDose / totalInterval) * 100, 0), 100);
 
-      // Calcular hora base del ciclo desde startDate
-      const cycleDate = new Date(treatment.startDate);
-      const cycleTimeString = cycleDate.toLocaleTimeString([], { 
-        hour: '2-digit', 
-        minute: '2-digit', 
-        hour12: false 
-      });
-
-      setEditForm({
-        name: treatment.name,
-        type: treatment.type,
-        description: treatment.description || '',
-        frequency: treatment.frequencyHours.toString(),
-        cycleStartTime: cycleTimeString,
-        nextDoseTime: nextTimeString
-      });
-    }
-  }, [treatment]);
-
-  if (!isOpen || !treatment) return null;
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editForm.name || !editForm.frequency || !editForm.cycleStartTime || !editForm.nextDoseTime) return;
-
-    // Actualizar startDate con la nueva hora base del ciclo
-    const now = new Date();
-    const [cycleHours, cycleMinutes] = editForm.cycleStartTime.split(':').map(Number);
-    const newStartDate = new Date(now);
-    newStartDate.setHours(cycleHours, cycleMinutes, 0, 0);
-
-    // Calcular próxima toma específica
-    const [nextHours, nextMinutes] = editForm.nextDoseTime.split(':').map(Number);
-    const nextDoseDate = new Date(now);
-    nextDoseDate.setHours(nextHours, nextMinutes, 0, 0);
-    
-    // Si la próxima toma ya pasó hoy, programar para mañana
-    if (nextDoseDate.getTime() < now.getTime()) {
-      nextDoseDate.setDate(nextDoseDate.getDate() + 1);
-    }
-
-    onSave(treatment.id, {
-      name: editForm.name,
-      type: editForm.type,
-      description: editForm.description,
-      frequencyHours: parseInt(editForm.frequency),
-      startDate: newStartDate.getTime(),
-      nextScheduledTime: nextDoseDate.getTime()
-    });
-
-    onClose();
+  const formatTime = (timestamp: number) => {
+    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const formatTimeUntil = (ms: number) => {
+    const hours = Math.floor(Math.abs(ms) / (1000 * 60 * 60));
+    const minutes = Math.floor((Math.abs(ms) % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (ms < 0) return 'Retrasado';
+    if (hours === 0) return `en ${minutes}m`;
+    if (minutes === 0) return `en ${hours}h`;
+    return `en ${hours}h ${minutes}m`;
+  };
+
+  // Colores según estado y tipo
+  const getColors = () => {
+    if (isOverdue) {
+      return {
+        gradient: 'from-rose-500 to-red-600',
+        bg: 'bg-rose-50',
+        border: 'border-rose-200',
+        icon: 'bg-rose-100 text-rose-600',
+        progressBg: 'bg-rose-200',
+        progressFill: 'bg-rose-500'
+      };
+    }
+    if (isDueSoon) {
+      return {
+        gradient: 'from-amber-500 to-orange-600',
+        bg: 'bg-amber-50',
+        border: 'border-amber-200',
+        icon: 'bg-amber-100 text-amber-600',
+        progressBg: 'bg-amber-200',
+        progressFill: 'bg-amber-500'
+      };
+    }
+    if (treatment.type === 'medication') {
+      return {
+        gradient: 'from-blue-500 to-indigo-600',
+        bg: 'bg-blue-50',
+        border: 'border-blue-200',
+        icon: 'bg-blue-100 text-blue-600',
+        progressBg: 'bg-blue-200',
+        progressFill: 'bg-blue-500'
+      };
+    }
+    return {
+      gradient: 'from-emerald-500 to-teal-600',
+      bg: 'bg-emerald-50',
+      border: 'border-emerald-200',
+      icon: 'bg-emerald-100 text-emerald-600',
+      progressBg: 'bg-emerald-200',
+      progressFill: 'bg-emerald-500'
+    };
+  };
+
+  const colors = getColors();
+
   return (
-    <div className="fixed inset-0 bg-slate-900/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
-      <div className="bg-white rounded-[2rem] w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
+    <div 
+      className={`relative rounded-3xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 ${colors.bg} border-2 ${colors.border}`}
+    >
+      {/* Barra de progreso superior */}
+      <div className={`h-2 ${colors.progressBg}`}>
+        <div 
+          className={`h-full ${colors.progressFill} transition-all duration-1000`}
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+
+      <div className="p-6">
         {/* Header */}
-        <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-white z-10">
-          <div>
-            <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-              Editar Tratamiento
-            </h2>
-            <p className="text-sm text-slate-500 font-medium">Modifica los detalles del tratamiento</p>
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex items-center gap-4 flex-1">
+            {/* Icono con badge de estado */}
+            <div className="relative">
+              <div className={`w-16 h-16 rounded-2xl flex items-center justify-center ${colors.icon} shadow-lg`}>
+                {treatment.type === 'medication' ? 
+                  <Pill className="w-8 h-8" /> : 
+                  <Droplets className="w-8 h-8" />
+                }
+              </div>
+              {isOverdue && (
+                <div className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 rounded-full flex items-center justify-center animate-pulse">
+                  <span className="text-white text-xs font-bold">!</span>
+                </div>
+              )}
+            </div>
+
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              <h3 className="text-xl font-black text-slate-900 truncate mb-1">
+                {treatment.name}
+              </h3>
+              <p className="text-sm text-slate-600 font-medium truncate">
+                {treatment.description || 'Seguir pauta médica'}
+              </p>
+              <div className="flex items-center gap-2 mt-2">
+                <span className={`text-xs font-bold px-2 py-1 rounded-full ${colors.bg} ${colors.border} border`}>
+                  Cada {treatment.frequencyHours}h
+                </span>
+              </div>
+            </div>
           </div>
-          <button 
-            onClick={onClose} 
-            className="p-2 bg-slate-50 hover:bg-slate-100 rounded-full transition-colors text-slate-500"
+
+          {/* Botón editar */}
+          <button
+            onClick={onEdit}
+            className="p-2 hover:bg-white/80 rounded-xl transition-all"
+            title="Editar"
+          >
+            <Pencil className="w-5 h-5 text-slate-400 hover:text-indigo-600" />
+          </button>
+        </div>
+
+        {/* Hora y countdown */}
+        <div className={`p-4 rounded-2xl mb-4 ${colors.bg} border ${colors.border}`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Clock className="w-5 h-5 text-slate-600" />
+              <span className="text-lg font-bold text-slate-900">
+                {formatTime(treatment.nextScheduledTime)}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {isDueSoon && <Zap className="w-4 h-4 text-amber-500 animate-pulse" />}
+              <span className={`text-sm font-bold ${isOverdue ? 'text-rose-600' : isDueSoon ? 'text-amber-600' : 'text-slate-600'}`}>
+                {formatTimeUntil(timeUntil)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Botones de acción */}
+        <div className="flex gap-3">
+          <button
+            onClick={onSkip}
+            className="flex-1 py-4 rounded-2xl border-2 border-slate-200 bg-white text-slate-700 font-bold text-sm hover:bg-slate-50 hover:border-slate-300 transition-all flex items-center justify-center gap-2 active:scale-95"
           >
             <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 bg-white">
-          <form id="editForm" onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">
-                Tipo de tratamiento
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <label className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl cursor-pointer transition-all border ${
-                  editForm.type === 'medication' 
-                    ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm' 
-                    : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
-                }`}>
-                  <input 
-                    type="radio" 
-                    name="type" 
-                    checked={editForm.type === 'medication'} 
-                    onChange={() => setEditForm({...editForm, type: 'medication'})} 
-                    className="hidden" 
-                  />
-                  <span className="font-bold text-sm">Medicamento</span>
-                </label>
-                <label className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl cursor-pointer transition-all border ${
-                  editForm.type === 'cure' 
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm' 
-                    : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
-                }`}>
-                  <input 
-                    type="radio" 
-                    name="type" 
-                    checked={editForm.type === 'cure'} 
-                    onChange={() => setEditForm({...editForm, type: 'cure'})} 
-                    className="hidden" 
-                  />
-                  <span className="font-bold text-sm">Cura / Herida</span>
-                </label>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 ml-1">
-                Nombre
-              </label>
-              <input
-                type="text"
-                required
-                value={editForm.name}
-                onChange={(e) => setEditForm({...editForm, name: e.target.value})}
-                placeholder={editForm.type === 'medication' ? "Ej. Paracetamol" : "Ej. Limpieza de herida"}
-                className="w-full px-5 py-3 rounded-xl bg-slate-50 border-none focus:bg-white focus:ring-2 focus:ring-primary-500 outline-none transition-all font-semibold text-slate-800 placeholder-slate-400"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 ml-1">
-                Detalles
-              </label>
-              <input
-                type="text"
-                value={editForm.description}
-                onChange={(e) => setEditForm({...editForm, description: e.target.value})}
-                placeholder="Ej. 1 comprimido de 500mg"
-                className="w-full px-5 py-3 rounded-xl bg-slate-50 border-none focus:bg-white focus:ring-2 focus:ring-primary-500 outline-none transition-all font-medium text-slate-800 placeholder-slate-400"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 ml-1">
-                  Intervalo (Horas)
-                </label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  max="168"
-                  value={editForm.frequency}
-                  onChange={(e) => setEditForm({...editForm, frequency: e.target.value})}
-                  className="w-full px-5 py-3 rounded-xl bg-slate-50 border-none focus:bg-white focus:ring-2 focus:ring-primary-500 outline-none transition-all font-semibold text-slate-800 text-center"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 ml-1">
-                  Hora Base Ciclo
-                </label>
-                <input
-                  type="time"
-                  required
-                  value={editForm.cycleStartTime}
-                  onChange={(e) => setEditForm({...editForm, cycleStartTime: e.target.value})}
-                  className="w-full px-2 py-3 rounded-xl bg-slate-50 border-none focus:bg-white focus:ring-2 focus:ring-primary-500 outline-none transition-all font-semibold text-slate-800 text-center"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 ml-1">
-                Próxima Toma Real
-              </label>
-              <input
-                type="time"
-                required
-                value={editForm.nextDoseTime}
-                onChange={(e) => setEditForm({...editForm, nextDoseTime: e.target.value})}
-                className="w-full px-2 py-3 rounded-xl bg-slate-50 border-none focus:bg-white focus:ring-2 focus:ring-primary-500 outline-none transition-all font-semibold text-slate-800 text-center"
-              />
-            </div>
-
-            <div className="bg-amber-50 p-4 rounded-xl border border-amber-100">
-              <p className="text-xs text-amber-800 font-medium">
-                💡 <strong>Nota:</strong> La "Hora Base Ciclo" es tu horario habitual de inicio (ej: 08:00). 
-                La "Próxima Toma Real" es cuándo toca específicamente la siguiente dosis. 
-                El historial anterior se mantiene.
-              </p>
-            </div>
-          </form>
-        </div>
-
-        {/* Footer */}
-        <div className="p-5 border-t border-slate-100 bg-white flex gap-3">
-          <button
-            onClick={onClose}
-            className="px-6 py-4 text-slate-500 font-bold rounded-2xl hover:bg-slate-100 transition-colors"
-          >
-            Cancelar
+            Omitir
           </button>
           <button
-            form="editForm"
-            type="submit"
-            className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 rounded-2xl shadow-xl shadow-slate-200 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+            onClick={onTake}
+            className={`flex-[2] py-4 rounded-2xl bg-gradient-to-r ${colors.gradient} text-white font-bold text-sm shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 active:scale-95`}
           >
-            <Save className="w-5 h-5" />
-            Guardar Cambios
+            <Check className="w-5 h-5" />
+            Tomado
+          </button>
+          <button
+            onClick={onDeactivate}
+            className="w-14 flex items-center justify-center rounded-2xl border-2 border-slate-200 bg-white hover:bg-amber-50 hover:border-amber-200 transition-all active:scale-95"
+            title="Dar de baja"
+          >
+            <AlertCircle className="w-5 h-5 text-slate-400 hover:text-amber-500" />
           </button>
         </div>
       </div>
