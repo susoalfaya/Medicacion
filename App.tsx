@@ -11,7 +11,6 @@ import { TreatmentCard } from './components/TreatmentCard';
 import { AdherenceChart } from './components/AdherenceChart';
 import { Confetti } from './components/Confetti';
 import { Check, X, Clock, AlertCircle, Trash2, Calendar, User as UserIcon, LogOut, Smartphone, CalendarDays, CheckCircle2, Share, Lock, Mail, Loader2, ArrowRight, Pencil, Pill, Droplets } from 'lucide-react';
-import { Check, X, Clock, Bell, AlertCircle, ... } from 'lucide-react';
 
 // --- Helper Functions ---
 const formatTime = (timestamp: number) => {
@@ -162,32 +161,27 @@ const cleanExpiredTreatments = async () => {
   }
 };
 
-// --- ESCUCHADOR DE NOTIFICACIONES ---
+// --- ESCUCHADOR DE NOTIFICACIONES BROADCAST ---
   useEffect(() => {
     const channel = new BroadcastChannel('sw-notifications');
     channel.onmessage = (event) => {
       if (event.data.action === 'taken') {
         const nextT = treatments.find(t => t.active);
         if (nextT) {
-          setActionModal({ isOpen: false, treatmentId: nextT.id, treatmentName: nextT.name, type: 'take' });
+          // Configuramos el modal con el tratamiento actual y ejecutamos la acción
+          setActionModal({ 
+            isOpen: false, 
+            treatmentId: nextT.id, 
+            treatmentName: nextT.name, 
+            type: 'take',
+            scheduledTime: nextT.nextScheduledTime 
+          });
           handleConfirmAction(Date.now());
         }
       }
     };
     return () => channel.close();
   }, [treatments, handleConfirmAction]);
-
-// ESCUCHA DEL MÓVIL (PEGA ESTO AQUÍ)
-useEffect(() => {
-  const channel = new BroadcastChannel('sw-notifications');
-  channel.onmessage = (event) => {
-    if (event.data.action === 'taken') {
-      // Si el usuario pulsa "Tomada" en la notificación, lo procesamos
-      handleConfirmAction(Date.now()); 
-    }
-  };
-  return () => channel.close();
-}, [handleConfirmAction]);
 
 // --- Initialization ---
   useEffect(() => {
