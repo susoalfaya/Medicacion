@@ -136,10 +136,10 @@ export const TreatmentCard: React.FC<TreatmentCardProps> = ({
           {/* Botón editar */}
           <button
             onClick={onEdit}
-            className="p-2 hover:bg-white/80 rounded-xl transition-all"
+            className="p-2 bg-white/50 hover:bg-white shadow-sm rounded-xl transition-all border border-slate-200" 
             title="Editar"
           >
-            <Pencil className="w-5 h-5 text-slate-400 hover:text-indigo-600" />
+            <Pencil className="w-5 h-5 text-slate-700 hover:text-indigo-600" />
           </button>
         </div>
 
