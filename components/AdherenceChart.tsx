@@ -39,6 +39,7 @@ export const AdherenceChart: React.FC<AdherenceChartProps> = ({ history }) => {
   };
 
   const last7Days = getLast7Days();
+  const maxDayTotal = Math.max(...last7Days.map(d => d.total), 1); // Máximo de tomas en un día
   const maxHeight = 100;
 
   return (
@@ -66,8 +67,9 @@ export const AdherenceChart: React.FC<AdherenceChartProps> = ({ history }) => {
       {/* Gráfico */}
       <div className="flex items-end justify-between gap-2 h-48 mb-4">
         {last7Days.map((day, index) => {
-          const takenHeight = day.total > 0 ? Math.max((day.taken / day.total) * 100, 5) : 0;
-          const skippedHeight = day.total > 0 ? Math.max((day.skipped / day.total) * 100, 5) : 0;
+          // Calcular altura basada en el máximo global
+          const takenHeight = maxDayTotal > 0 ? (day.taken / maxDayTotal) * 100 : 0;
+          const skippedHeight = maxDayTotal > 0 ? (day.skipped / maxDayTotal) * 100 : 0;
           const hasData = day.total > 0;
 
           return (
@@ -99,7 +101,7 @@ export const AdherenceChart: React.FC<AdherenceChartProps> = ({ history }) => {
                       className="w-full bg-gradient-to-t from-emerald-500 to-emerald-400 transition-all duration-500"
                       style={{ 
                         height: `${takenHeight}%`,
-                        minHeight: '4px',
+                        minHeight: '8px',
                         borderTopLeftRadius: day.skipped === 0 ? '0.75rem' : '0',
                         borderTopRightRadius: day.skipped === 0 ? '0.75rem' : '0'
                       }}
