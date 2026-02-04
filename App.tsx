@@ -1210,12 +1210,13 @@ const handleSaveEdit = async (treatmentId: string, data: any) => {
         scheduledTime={actionModal.scheduledTime}
       />
 
-      <EditTreatmentModal
-        isOpen={editModal.isOpen}
-        onClose={() => setEditModal({ isOpen: false, treatment: null })}
-        onSave={handleSaveEdit}
-        treatment={editModal.treatment}
-      />
+ <EditTreatmentModal
+  isOpen={editModal.isOpen}
+  onClose={() => setEditModal({ isOpen: false, treatment: null })}
+  onSave={handleSaveEdit}
+  onDeactivate={handleToggleActive} // <-- AÑADE ESTA PROP
+  treatment={editModal.treatment}
+/>
 
       <EditHistoryModal
         isOpen={editHistoryModal.isOpen}
