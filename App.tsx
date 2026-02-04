@@ -638,37 +638,32 @@ const handleSaveTreatment = async (data: any) => {
       setToast(null);
   };
 
-  const handleToggleActive = async (treatment: Treatment) => {
-      if(!supabase) return;
-      
-      const confirmMsg = treatment.active 
-        ? '¿Dar de baja este tratamiento? El historial se conservará.'
-        : '¿Reactivar este tratamiento?';
-      
-      if(!confirm(confirmMsg)) return;
+const handleToggleActive = async (treatment: Treatment) => {
+    if(!supabase) return;
+    
+    // Eliminamos el if(!confirm(...)) para que sea directo
+    setTreatments(prev => prev.map(t => 
+      t.id === treatment.id 
+        ? { ...t, active: !t.active }
+        : t
+    ));
 
-      setTreatments(prev => prev.map(t => 
-        t.id === treatment.id 
-          ? { ...t, active: !t.active }
-          : t
-      ));
+    try {
+      await supabase
+        .from('treatments')
+        .update({ active: !treatment.active })
+        .eq('id', treatment.id);
 
-      try {
-        await supabase
-          .from('treatments')
-          .update({ active: !treatment.active })
-          .eq('id', treatment.id);
-
-        setToast({ 
-          message: treatment.active ? 'Tratamiento dado de baja' : 'Tratamiento reactivado', 
-          type: 'success' 
-        });
-      } catch (error) {
-        console.error('Error:', error);
-        setToast({ message: 'Error al actualizar', type: 'error' });
-        fetchData(session.user.id);
-      }
-  };
+      setToast({ 
+        message: treatment.active ? 'Tratamiento dado de baja' : 'Tratamiento reactivado', 
+        type: 'success' 
+      });
+    } catch (error) {
+      console.error('Error:', error);
+      setToast({ message: 'Error al actualizar', type: 'error' });
+      if (session) fetchData(session.user.id);
+    }
+};
 
   const handleDeletePermanent = async (id: string) => {
       if(!supabase) return;
@@ -1210,11 +1205,11 @@ const handleSaveEdit = async (treatmentId: string, data: any) => {
         scheduledTime={actionModal.scheduledTime}
       />
 
- <EditTreatmentModal
+<EditTreatmentModal
   isOpen={editModal.isOpen}
   onClose={() => setEditModal({ isOpen: false, treatment: null })}
   onSave={handleSaveEdit}
-  onDeactivate={handleToggleActive} // <-- AÑADE ESTA PROP
+  onDeactivate={handleToggleActive} // Esta es la función que disparará el botón rojo
   treatment={editModal.treatment}
 />
 
