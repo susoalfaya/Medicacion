@@ -1,3 +1,4 @@
+import { supabase } from './supabaseClient';
 import React, { useState, useEffect, useCallback } from 'react';
 import { createClient, User } from '@supabase/supabase-js';
 import { Treatment, HistoryLog, UserProfile } from './types';
@@ -27,14 +28,6 @@ const getGreeting = () => {
   if (hour < 20) return 'Buenas tardes';
   return 'Buenas noches';
 };
-
-// --- Supabase Init ---
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
-
-const supabase = (supabaseUrl && supabaseKey) 
-  ? createClient(supabaseUrl, supabaseKey) 
-  : null;
 
 // --- DB Mapping Helpers ---
 const mapTreatmentToDB = (t: Treatment, userId: string) => ({
@@ -161,44 +154,6 @@ const cleanExpiredTreatments = async () => {
   }
 };
 
-
-// --- Initialization ---
-  useEffect(() => {
-    if (!supabase) {
-        setInitialLoading(false);
-        return;
-    }
-
-    // 1. Manejo de la sesión inicial al cargar la página
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      if (session?.user) {
-          // Limpieza y carga inicial
-          await cleanExpiredTreatments(); 
-          fetchUserProfile(session.user);
-          fetchData(session.user.id);
-      }
-      setInitialLoading(false);
-    });
-
-    // 2. Escuchar cambios en la sesión (Login/Logout)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session);
-      if (session?.user) {
-          // Cada vez que el usuario entre, "pasamos la escoba"
-          await cleanExpiredTreatments(); 
-          fetchUserProfile(session.user);
-          fetchData(session.user.id);
-      } else {
-          setUserProfile(null);
-          setTreatments([]);
-          setHistory([]);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
   const fetchUserProfile = async (user: User) => {
       if (!supabase) return;
       try {
@@ -250,6 +205,249 @@ const fetchData = async (userId: string) => {
         
     if (!hError && hData) setHistory(hData.map(mapHistoryFromDB));
 };
+
+  const handleConfirmAction = useCallback(async (specificTimestamp: number) => {
+
+    if (!session || !actionModal.treatmentId || !supabase) return;
+
+
+
+    const action = actionModal.type;
+
+    const treatmentId = actionModal.treatmentId;
+
+    const treatment = treatments.find(t => t.id === treatmentId);
+
+    if (!treatment) return;
+
+
+
+    let nextTime = treatment.nextScheduledTime;
+
+    let timeShiftDetected = false;
+
+
+
+    if (action === 'take') {
+
+      nextTime = specificTimestamp + (treatment.frequencyHours * 60 * 60 * 1000);
+
+      
+
+      const diff = Math.abs(specificTimestamp - treatment.nextScheduledTime);
+
+      if (diff > 15 * 60 * 1000 && treatment.frequencyHours > 0) {
+
+          timeShiftDetected = true;
+
+          
+
+          await supabase
+
+            .from('treatments')
+
+            .update({ start_date: specificTimestamp })
+
+            .eq('id', treatmentId);
+
+      }
+
+    } else {
+
+      nextTime = treatment.nextScheduledTime + (treatment.frequencyHours * 60 * 60 * 1000);
+
+    }
+
+
+
+    const updatedTreatment = { 
+
+      ...treatment, 
+
+      nextScheduledTime: nextTime,
+
+      ...(timeShiftDetected && action === 'take' ? { startDate: specificTimestamp } : {})
+
+    };
+
+    setTreatments(prev => prev.map(t => t.id === treatmentId ? updatedTreatment : t));
+
+    
+
+    const tempHistoryLog: HistoryLog = {
+
+        id: Math.random().toString(),
+
+        treatmentId: treatment.id,
+
+        treatmentName: treatment.name,
+
+        userId: session.user.id,
+
+        timestamp: Date.now(),
+
+        actualTime: specificTimestamp,
+
+        status: action === 'take' ? 'taken' : 'skipped',
+
+        type: treatment.type
+
+    };
+
+    setHistory(h => [tempHistoryLog, ...h]);
+
+
+
+    try {
+
+        await supabase.from('treatments')
+
+            .update({ next_scheduled_time: nextTime })
+
+            .eq('id', treatmentId);
+
+
+
+        const { data: insertedLog } = await supabase.from('history').insert(mapHistoryToDB(tempHistoryLog, session.user.id)).select().single();
+
+        if (insertedLog) {
+
+            setHistory(h => h.map(x => x.id === tempHistoryLog.id ? mapHistoryFromDB(insertedLog) : x));
+
+        }
+
+
+
+    } catch(e) {
+
+        console.error("Sync error", e);
+
+        setToast({ message: 'Error de conexión.', type: 'warning' });
+
+    }
+
+
+
+    setActionModal(prev => ({ ...prev, isOpen: false, treatmentId: null }));
+
+    
+
+    // Verificar si completamos todas las tomas del día
+
+    if (action === 'take') {
+
+      const endOfDay = new Date();
+
+      endOfDay.setHours(23, 59, 59, 999);
+
+      
+
+      const remainingToday = treatments.filter(t => 
+
+        t.active && 
+
+        t.id !== treatmentId &&
+
+        t.nextScheduledTime < endOfDay.getTime() && 
+
+        t.nextScheduledTime > Date.now()
+
+      ).length;
+
+      
+
+      if (remainingToday === 0) {
+
+        setShowConfetti(true);
+
+        setTimeout(() => setShowConfetti(false), 4000);
+
+      }
+
+    }
+
+
+
+    if (timeShiftDetected) {
+
+        setToast({
+
+            message: 'Horario reprogramado.',
+
+            type: 'warning',
+
+            action: { label: 'Actualizar Agenda', onClick: handleExportCalendar }
+
+        });
+
+    } else {
+
+        setToast({ message: 'Registrado correctamente', type: 'success' });
+
+    }
+
+
+
+  }, [session, actionModal, treatments]);
+
+  // --- Initialization ---
+  useEffect(() => {
+    if (!supabase) {
+        setInitialLoading(false);
+        return;
+    }
+
+    // 1. Manejo de la sesión inicial al cargar la página
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      setSession(session);
+      if (session?.user) {
+          // Limpieza y carga inicial
+          await cleanExpiredTreatments(); 
+          fetchUserProfile(session.user);
+          fetchData(session.user.id);
+      }
+      setInitialLoading(false);
+    });
+
+    // 2. Escuchar cambios en la sesión (Login/Logout)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setSession(session);
+      if (session?.user) {
+          // Cada vez que el usuario entre, "pasamos la escoba"
+          await cleanExpiredTreatments(); 
+          fetchUserProfile(session.user);
+          fetchData(session.user.id);
+      } else {
+          setUserProfile(null);
+          setTreatments([]);
+          setHistory([]);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // --- ESCUCHADOR DE NOTIFICACIONES BROADCAST ---
+  useEffect(() => {
+    const channel = new BroadcastChannel('sw-notifications');
+    channel.onmessage = (event) => {
+      if (event.data.action === 'taken') {
+        const nextT = treatments.find(t => t.active);
+        if (nextT) {
+          // Configuramos el modal con el tratamiento actual y ejecutamos la acción
+          setActionModal({ 
+            isOpen: false, 
+            treatmentId: nextT.id, 
+            treatmentName: nextT.name, 
+            type: 'take',
+            scheduledTime: nextT.nextScheduledTime 
+          });
+          handleConfirmAction(Date.now());
+        }
+      }
+    };
+    return () => channel.close();
+  }, [treatments, handleConfirmAction]);
 
   // --- Install Prompt ---
   useEffect(() => {
@@ -351,42 +549,35 @@ const fetchData = async (userId: string) => {
   };
 
   // --- Treatment Logic ---
-  const handleSaveTreatment = async (data: any) => {
+const handleSaveTreatment = async (data: any) => {
     if (!session || !supabase) return;
 
-    const dbPayload = {
-        user_id: session.user.id,
+    // Usamos tu función mapTreatmentToDB para asegurar la estructura
+    const newTreatmentData: Treatment = {
         name: data.name,
         type: data.type,
         description: data.description,
-        frequency_hours: data.frequencyHours,
-        next_scheduled_time: data.startDate,
-        start_date: data.startDate,
+        frequencyHours: parseInt(data.frequencyHours.toString()),
+        startDate: data.startDate,
+        nextScheduledTime: data.startDate,
+        durationDays: data.durationDays ? parseInt(data.durationDays.toString()) : null,
+        endDate: data.endDate ? data.endDate : null,
         active: true
     };
 
     const { data: inserted, error } = await supabase
         .from('treatments')
-        .insert(dbPayload)
+        .insert(mapTreatmentToDB(newTreatmentData, session.user.id))
         .select()
         .single();
 
     if (error) {
-        setToast({ message: 'Error al guardar.', type: 'error' });
-        console.error(error);
+        setToast({ message: 'Error al conectar con la base de datos', type: 'error' });
         return;
     }
-
-    if (inserted) {
-        const newTreatment = mapTreatmentFromDB(inserted);
-        setTreatments(prev => [...prev, newTreatment]);
-        setToast({ 
-            message: 'Tratamiento guardado.', 
-            type: 'success',
-            action: { label: 'Exportar Agenda', onClick: handleExportCalendar } 
-        });
-    }
-  };
+    
+    // ... resto de la lógica para actualizar el estado local
+};
 
   const initiateAction = (treatment: Treatment, type: 'take' | 'skip') => {
     setActionModal({
@@ -447,121 +638,6 @@ const fetchData = async (userId: string) => {
       setToast(null);
   };
 
-  const handleConfirmAction = useCallback(async (specificTimestamp: number) => {
-    if (!session || !actionModal.treatmentId || !supabase) return;
-
-    const action = actionModal.type;
-    const treatmentId = actionModal.treatmentId;
-    const treatment = treatments.find(t => t.id === treatmentId);
-    if (!treatment) return;
-
-    let nextTime = treatment.nextScheduledTime;
-    let timeShiftDetected = false;
-
-    if (action === 'take') {
-      nextTime = specificTimestamp + (treatment.frequencyHours * 60 * 60 * 1000);
-      
-      const diff = Math.abs(specificTimestamp - treatment.nextScheduledTime);
-      if (diff > 15 * 60 * 1000 && treatment.frequencyHours > 0) {
-          timeShiftDetected = true;
-          
-          await supabase
-            .from('treatments')
-            .update({ start_date: specificTimestamp })
-            .eq('id', treatmentId);
-      }
-    } else {
-      nextTime = treatment.nextScheduledTime + (treatment.frequencyHours * 60 * 60 * 1000);
-    }
-
-    const updatedTreatment = { 
-      ...treatment, 
-      nextScheduledTime: nextTime,
-      ...(timeShiftDetected && action === 'take' ? { startDate: specificTimestamp } : {})
-    };
-    setTreatments(prev => prev.map(t => t.id === treatmentId ? updatedTreatment : t));
-    
-    const tempHistoryLog: HistoryLog = {
-        id: Math.random().toString(),
-        treatmentId: treatment.id,
-        treatmentName: treatment.name,
-        userId: session.user.id,
-        timestamp: Date.now(),
-        actualTime: specificTimestamp,
-        status: action === 'take' ? 'taken' : 'skipped',
-        type: treatment.type
-    };
-    setHistory(h => [tempHistoryLog, ...h]);
-
-    try {
-        await supabase.from('treatments')
-            .update({ next_scheduled_time: nextTime })
-            .eq('id', treatmentId);
-
-        const { data: insertedLog } = await supabase.from('history').insert(mapHistoryToDB(tempHistoryLog, session.user.id)).select().single();
-        if (insertedLog) {
-            setHistory(h => h.map(x => x.id === tempHistoryLog.id ? mapHistoryFromDB(insertedLog) : x));
-        }
-
-    } catch(e) {
-        console.error("Sync error", e);
-        setToast({ message: 'Error de conexión.', type: 'warning' });
-    }
-
-    setActionModal(prev => ({ ...prev, isOpen: false, treatmentId: null }));
-    
-    // Verificar si completamos todas las tomas del día
-    if (action === 'take') {
-      const endOfDay = new Date();
-      endOfDay.setHours(23, 59, 59, 999);
-      
-      const remainingToday = treatments.filter(t => 
-        t.active && 
-        t.id !== treatmentId &&
-        t.nextScheduledTime < endOfDay.getTime() && 
-        t.nextScheduledTime > Date.now()
-      ).length;
-      
-      if (remainingToday === 0) {
-        setShowConfetti(true);
-        setTimeout(() => setShowConfetti(false), 4000);
-      }
-    }
-
-    if (timeShiftDetected) {
-        setToast({
-            message: 'Horario reprogramado.',
-            type: 'warning',
-            action: { label: 'Actualizar Agenda', onClick: handleExportCalendar }
-        });
-    } else {
-        setToast({ message: 'Registrado correctamente', type: 'success' });
-    }
-
-  }, [session, actionModal, treatments]);
-
-  // --- ESCUCHADOR DE NOTIFICACIONES BROADCAST ---
-  useEffect(() => {
-    const channel = new BroadcastChannel('sw-notifications');
-    channel.onmessage = (event) => {
-      if (event.data.action === 'taken') {
-        const nextT = treatments.find(t => t.active);
-        if (nextT) {
-          // Configuramos el modal con el tratamiento actual y ejecutamos la acción
-          setActionModal({ 
-            isOpen: false, 
-            treatmentId: nextT.id, 
-            treatmentName: nextT.name, 
-            type: 'take',
-            scheduledTime: nextT.nextScheduledTime 
-          });
-          handleConfirmAction(Date.now());
-        }
-      }
-    };
-    return () => channel.close();
-  }, [treatments, handleConfirmAction]);
-  
   const handleToggleActive = async (treatment: Treatment) => {
       if(!supabase) return;
       

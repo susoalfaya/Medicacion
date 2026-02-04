@@ -27,14 +27,14 @@ export const AddTreatmentModal: React.FC<AddTreatmentModalProps> = ({ isOpen, on
 
     setIsAnalyzing(true);
     try {
-      // Llamada al servicio que invoca la Edge Function de Supabase
+      // 1. Llamamos al servicio que ya "abre la caja" del JSON
       const result = await analyzeMedicationImage(file);
       
       if (result && result.length > 0) {
-        // Si hay varios medicamentos (como Omeprazol y Paracetamol del log)
+        // CASO A: Múltiples medicamentos detectados (ej: Omeprazol y Paracetamol)
         if (result.length > 1) {
           const confirmAdd = confirm(
-            `Se han detectado ${result.length} medicamentos:\n${result.map((m: any) => `- ${m.name}`).join('\n')}\n\n¿Deseas añadirlos todos automáticamente?`
+            `Se han detectado ${result.length} medicamentos:\n${result.map((m: any) => `- ${m.name}`).join('\n')}\n\n¿Deseas añadirlos TODOS automáticamente?`
           );
 
           if (confirmAdd) {
@@ -42,10 +42,7 @@ export const AddTreatmentModal: React.FC<AddTreatmentModalProps> = ({ isOpen, on
               const [hours, minutes] = formData.startTime.split(':').map(Number);
               const startDate = new Date();
               startDate.setHours(hours, minutes, 0, 0);
-              
-              if (startDate.getTime() < Date.now()) {
-                startDate.setDate(startDate.getDate() + 1);
-              }
+              if (startDate.getTime() < Date.now()) startDate.setDate(startDate.getDate() + 1);
 
               onSave({
                 type: 'medication',
@@ -63,18 +60,19 @@ export const AddTreatmentModal: React.FC<AddTreatmentModalProps> = ({ isOpen, on
           }
         }
 
-        // Si solo hay uno o el usuario canceló la carga masiva, rellena el primero en el form
+        // CASO B: Un solo medicamento o el usuario prefiere revisar
+        // Aquí es donde se VOLCAN los datos al formulario
         const med = result[0];
         setFormData(prev => ({
           ...prev,
           name: med.name || prev.name,
-          description: med.description || prev.description, // Mapeado a 'description'
-          frequencyHours: med.frequencyHours || prev.frequencyHours
+          description: med.description || prev.description, // Coincide con el JSON de la IA
+          frequencyHours: med.frequencyHours ? parseInt(med.frequencyHours.toString()) : prev.frequencyHours
         }));
       }
     } catch (error) {
       console.error('Error analizando imagen:', error);
-      alert("No se pudo analizar la imagen. Verifica la conexión con Supabase.");
+      alert("Hubo un error al volcar los datos. Por favor, revisa la consola.");
     } finally {
       setIsAnalyzing(false);
     }
@@ -104,7 +102,7 @@ export const AddTreatmentModal: React.FC<AddTreatmentModalProps> = ({ isOpen, on
       nextScheduledTime: startDate.getTime()
     });
 
-    // Reset del form
+    // Reset y cierre
     setFormData({
       type: 'medication',
       name: '',
@@ -155,14 +153,14 @@ export const AddTreatmentModal: React.FC<AddTreatmentModalProps> = ({ isOpen, on
             </button>
           </div>
 
-          {/* Botón Escanear con IA */}
+          {/* Botón Escanear */}
           <label className={`flex items-center justify-center gap-2 p-3 border-2 border-dashed rounded-2xl cursor-pointer transition-all ${
             isAnalyzing ? 'bg-slate-50 border-indigo-300' : 'border-slate-100 hover:border-indigo-400 hover:bg-indigo-50/30'
           }`}>
             {isAnalyzing ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
-                <span className="font-bold text-sm text-indigo-600">Analizando receta...</span>
+                <span className="font-bold text-sm text-indigo-600">Analizando...</span>
               </>
             ) : (
               <>
@@ -170,14 +168,7 @@ export const AddTreatmentModal: React.FC<AddTreatmentModalProps> = ({ isOpen, on
                 <span className="font-bold text-sm text-slate-500">Escanear Receta o Caja</span>
               </>
             )}
-            <input 
-              type="file" 
-              accept="image/*" 
-              capture="environment" 
-              onChange={handleImageCapture} 
-              className="hidden" 
-              disabled={isAnalyzing} 
-            />
+            <input type="file" accept="image/*" capture="environment" onChange={handleImageCapture} className="hidden" disabled={isAnalyzing} />
           </label>
 
           <div className="space-y-4">
@@ -191,7 +182,7 @@ export const AddTreatmentModal: React.FC<AddTreatmentModalProps> = ({ isOpen, on
               />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Instrucciones (Dosis)</label>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Instrucciones</label>
               <input
                 type="text" value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -226,27 +217,6 @@ export const AddTreatmentModal: React.FC<AddTreatmentModalProps> = ({ isOpen, on
                 onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
                 className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium"
               />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1">Duración (Días)</label>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  type="number" min="1" value={formData.durationDays}
-                  onChange={(e) => setFormData({ ...formData, durationDays: parseInt(e.target.value) })}
-                  className="w-full pl-10 pr-4 py-3 rounded-2xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => setFormData({ ...formData, durationDays: 365 })}
-                className="px-4 py-3 rounded-2xl bg-slate-50 text-slate-500 text-[10px] font-bold border border-slate-100 hover:bg-slate-100 transition-colors uppercase"
-              >
-                Crónico
-              </button>
             </div>
           </div>
 
