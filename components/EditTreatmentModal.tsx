@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Trash2, Calendar, Pill, Droplets, Clock, Info } from 'lucide-react';
+import { X, Save, Trash2, Calendar, Pill, Droplets, Clock, Info, AlertCircle } from 'lucide-react';
 import { Treatment, TreatmentType } from '../types';
 
 interface EditTreatmentModalProps {
@@ -17,6 +17,9 @@ export const EditTreatmentModal: React.FC<EditTreatmentModalProps> = ({
   onDeactivate,
   treatment 
 }) => {
+  // Estado para controlar si mostramos el aviso de baja estético
+  const [showConfirmBaja, setShowConfirmBaja] = useState(false);
+  
   const [editForm, setEditForm] = useState({
     name: '',
     type: 'medication' as TreatmentType,
@@ -31,7 +34,6 @@ export const EditTreatmentModal: React.FC<EditTreatmentModalProps> = ({
     if (treatment) {
       const nextDate = new Date(treatment.nextScheduledTime);
       const nextTimeString = nextDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-
       const cycleDate = new Date(treatment.startDate);
       const cycleTimeString = cycleDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 
@@ -44,6 +46,7 @@ export const EditTreatmentModal: React.FC<EditTreatmentModalProps> = ({
         cycleStartTime: cycleTimeString,
         nextDoseTime: nextTimeString
       });
+      setShowConfirmBaja(false); // Reset al cambiar de tratamiento
     }
   }, [treatment]);
 
@@ -51,8 +54,6 @@ export const EditTreatmentModal: React.FC<EditTreatmentModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editForm.name || !editForm.frequency || !editForm.cycleStartTime || !editForm.nextDoseTime) return;
-
     const now = new Date();
     const [cycleHours, cycleMinutes] = editForm.cycleStartTime.split(':').map(Number);
     const newStartDate = new Date(now);
@@ -85,160 +86,126 @@ export const EditTreatmentModal: React.FC<EditTreatmentModalProps> = ({
       endDate: endDate ? endDate.getTime() : null,
       active: endDate ? (Date.now() < endDate.getTime()) : true 
     });
-
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
-      <div className="bg-white rounded-[2rem] w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
-        {/* Header */}
-        <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-white z-10">
-          <div>
-            <h2 className="text-xl font-bold text-slate-900 tracking-tight">Editar Tratamiento</h2>
-            <p className="text-sm text-slate-500 font-medium">Modifica los detalles del tratamiento</p>
-          </div>
-          <button onClick={onClose} className="p-2 bg-slate-50 hover:bg-slate-100 rounded-full transition-colors text-slate-500">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 bg-white">
-          <form id="editForm" onSubmit={handleSubmit} className="space-y-5">
-            
-            {/* Tipo de Tratamiento */}
-            <div className="flex bg-slate-100 p-1 rounded-2xl">
-              <button
-                type="button"
-                onClick={() => setEditForm({ ...editForm, type: 'medication' })}
-                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${editForm.type === 'medication' ? 'bg-white shadow-sm text-primary-600' : 'text-slate-400'}`}
-              >
-                <Pill className="w-5 h-5" /> Medicamento
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditForm({ ...editForm, type: 'cure' })}
-                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${editForm.type === 'cure' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}
-              >
-                <Droplets className="w-5 h-5" /> Cura
+    <div className="fixed inset-0 bg-slate-900/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200 border border-white">
+        
+        {/* Renderizado Condicional: Formulario o Confirmación de Baja */}
+        {!showConfirmBaja ? (
+          <>
+            {/* Header Original */}
+            <div className="p-6 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900 tracking-tight">Editar Tratamiento</h2>
+                <p className="text-sm text-slate-500 font-medium">Modifica los detalles del tratamiento</p>
+              </div>
+              <button onClick={onClose} className="p-2 hover:bg-white rounded-full transition-all shadow-sm">
+                <X className="w-5 h-5 text-slate-400" />
               </button>
             </div>
 
-            {/* Nombre */}
-            <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 ml-1">Nombre</label>
-              <input
-                type="text"
-                value={editForm.name}
-                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                className="w-full px-5 py-3 rounded-xl bg-slate-50 border-none focus:bg-white focus:ring-2 focus:ring-primary-500 outline-none transition-all font-semibold text-slate-800"
-                placeholder="Ej: Ibuprofeno"
-              />
-            </div>
-
-            {/* Descripción */}
-            <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 ml-1">Detalles (opcional)</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={editForm.description}
-                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                  className="w-full px-5 py-3 pl-12 rounded-xl bg-slate-50 border-none focus:bg-white focus:ring-2 focus:ring-primary-500 outline-none transition-all font-semibold text-slate-800"
-                  placeholder="Ej: Después de comer"
-                />
-                <Info className="absolute left-4 top-3.5 w-5 h-5 text-slate-400" />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              {/* Intervalo */}
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 ml-1">Cada (horas)</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={editForm.frequency}
-                    onChange={(e) => setEditForm({ ...editForm, frequency: e.target.value })}
-                    className="w-full px-5 py-3 pl-12 rounded-xl bg-slate-50 border-none focus:bg-white focus:ring-2 focus:ring-primary-500 outline-none transition-all font-semibold text-slate-800"
-                  />
-                  <Clock className="absolute left-4 top-3.5 w-5 h-5 text-slate-400" />
+            {/* Content con Scroll */}
+            <div className="flex-1 overflow-y-auto p-6 bg-white custom-scrollbar">
+              <form id="editForm" onSubmit={handleSubmit} className="space-y-6">
+                
+                <div className="flex bg-slate-100 p-1 rounded-2xl">
+                  <button type="button" onClick={() => setEditForm({ ...editForm, type: 'medication' })} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${editForm.type === 'medication' ? 'bg-white shadow-sm text-primary-600' : 'text-slate-400'}`}>
+                    <Pill className="w-5 h-5" /> Medicamento
+                  </button>
+                  <button type="button" onClick={() => setEditForm({ ...editForm, type: 'cure' })} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${editForm.type === 'cure' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>
+                    <Droplets className="w-5 h-5" /> Cura
+                  </button>
                 </div>
-              </div>
 
-              {/* Duración */}
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 ml-1">Duración (días)</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={editForm.durationDays}
-                    onChange={(e) => setEditForm({ ...editForm, durationDays: e.target.value })}
-                    className="w-full px-5 py-3 pl-12 rounded-xl bg-slate-50 border-none focus:bg-white focus:ring-2 focus:ring-primary-500 outline-none transition-all font-semibold text-slate-800"
-                    placeholder="Crónico"
-                  />
-                  <Calendar className="absolute left-4 top-3.5 w-5 h-5 text-slate-400" />
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Nombre</label>
+                  <input type="text" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="w-full px-5 py-4 rounded-2xl bg-slate-50 border-none focus:ring-2 focus:ring-primary-500 outline-none text-sm font-bold text-slate-700 shadow-inner" />
                 </div>
-              </div>
+
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Detalles</label>
+                  <div className="relative">
+                    <input type="text" value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} className="w-full px-5 py-4 pl-12 rounded-2xl bg-slate-50 border-none focus:ring-2 focus:ring-primary-500 outline-none text-sm font-medium text-slate-600 shadow-inner" />
+                    <Info className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Cada (horas)</label>
+                    <div className="relative">
+                      <Clock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
+                      <input type="number" value={editForm.frequency} onChange={(e) => setEditForm({ ...editForm, frequency: e.target.value })} className="w-full pl-11 pr-4 py-4 rounded-2xl bg-slate-50 border-none text-sm font-bold text-slate-700 shadow-inner" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Duración (días)</label>
+                    <div className="relative">
+                      <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
+                      <input type="number" value={editForm.durationDays} onChange={(e) => setEditForm({ ...editForm, durationDays: e.target.value })} placeholder="Crónico" className="w-full pl-11 pr-4 py-4 rounded-2xl bg-slate-50 border-none text-sm font-bold text-slate-700 shadow-inner" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Hora inicio</label>
+                    <input type="time" value={editForm.cycleStartTime} onChange={(e) => setEditForm({ ...editForm, cycleStartTime: e.target.value })} className="w-full px-5 py-4 rounded-2xl bg-slate-50 border-none text-sm font-bold text-slate-700 shadow-inner" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Próxima toma</label>
+                    <input type="time" value={editForm.nextDoseTime} onChange={(e) => setEditForm({ ...editForm, nextDoseTime: e.target.value })} className="w-full px-5 py-4 rounded-2xl bg-slate-50 border-none text-sm font-bold text-slate-700 shadow-inner" />
+                  </div>
+                </div>
+              </form>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-               {/* Hora Base */}
-               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 ml-1">Hora inicio</label>
-                <input
-                  type="time"
-                  value={editForm.cycleStartTime}
-                  onChange={(e) => setEditForm({ ...editForm, cycleStartTime: e.target.value })}
-                  className="w-full px-5 py-3 rounded-xl bg-slate-50 border-none focus:bg-white focus:ring-2 focus:ring-primary-500 outline-none transition-all font-semibold text-slate-800"
-                />
+            {/* Footer con Botón de Baja Estético */}
+            <div className="p-6 border-t border-slate-50 bg-slate-50/30 flex flex-col gap-3">
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmBaja(true)}
+                  className="px-6 py-4 bg-rose-50 text-rose-600 font-bold rounded-[1.5rem] hover:bg-rose-100 transition-all flex items-center gap-2"
+                >
+                  <Trash2 className="w-5 h-5" /> Baja
+                </button>
+                <button form="editForm" type="submit" className="flex-1 bg-slate-900 text-white font-bold py-4 rounded-[1.5rem] shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2">
+                  <Save className="w-5 h-5" /> Guardar
+                </button>
               </div>
-
-              {/* Próxima Toma */}
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide mb-2 ml-1">Próxima toma</label>
-                <input
-                  type="time"
-                  value={editForm.nextDoseTime}
-                  onChange={(e) => setEditForm({ ...editForm, nextDoseTime: e.target.value })}
-                  className="w-full px-5 py-3 rounded-xl bg-slate-50 border-none focus:bg-white focus:ring-2 focus:ring-primary-500 outline-none transition-all font-semibold text-slate-800"
-                />
-              </div>
+              <button onClick={onClose} className="w-full py-2 text-slate-400 text-xs font-black uppercase tracking-widest hover:text-slate-600 transition-colors">Cancelar</button>
             </div>
-
-          </form>
-        </div>
-
-        {/* Footer */}
-        <div className="p-5 border-t border-slate-100 bg-white flex flex-col gap-3">
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                if(confirm('¿Seguro que quieres dar de baja este tratamiento?')) {
-                  onDeactivate(treatment.id);
-                  onClose();
-                }
-              }}
-              className="px-5 py-4 bg-rose-50 text-rose-600 font-bold rounded-2xl hover:bg-rose-100 transition-colors flex items-center gap-2"
-            >
-              <Trash2 className="w-5 h-5" />
-              Baja
-            </button>
-            <button
-              form="editForm"
-              type="submit"
-              className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 rounded-2xl shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-            >
-              <Save className="w-5 h-5" />
-              Guardar
-            </button>
+          </>
+        ) : (
+          /* VISTA DE CONFIRMACIÓN DE BAJA (Elimina el confirm nativo) */
+          <div className="p-10 text-center animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <div className="w-20 h-20 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+              <AlertCircle className="w-10 h-10 text-rose-500" />
+            </div>
+            <h3 className="text-2xl font-black text-slate-800 mb-3">¿Dar de baja?</h3>
+            <p className="text-slate-500 text-sm font-medium leading-relaxed mb-10 px-4">
+              Estás a punto de finalizar el tratamiento de <span className="font-bold text-slate-800">{editForm.name}</span>. Esta acción no se puede deshacer.
+            </p>
+            <div className="flex flex-col gap-3">
+              <button 
+                onClick={() => { onDeactivate(treatment.id); onClose(); }}
+                className="w-full py-5 bg-rose-500 text-white rounded-[1.5rem] font-bold shadow-lg shadow-rose-100 active:scale-95 transition-all"
+              >
+                Sí, finalizar tratamiento
+              </button>
+              <button 
+                onClick={() => setShowConfirmBaja(false)}
+                className="w-full py-4 text-slate-400 font-bold text-sm"
+              >
+                No, mantener activo
+              </button>
+            </div>
           </div>
-          <button onClick={onClose} className="w-full py-2 text-slate-400 text-sm font-semibold hover:text-slate-600 transition-colors">
-            Cancelar
-          </button>
-        </div>
+        )}
       </div>
     </div>
   );
