@@ -666,24 +666,41 @@ const handleToggleActive = async (treatment: Treatment) => {
 };
 
 const handleDeactivateTreatment = async (treatment: Treatment) => {
-    if(!supabase || !session) return;
+    // 1. Verificación de seguridad
+    if(!supabase || !session || !treatment.id) {
+        console.error("Faltan datos para la baja:", { supabase: !!supabase, session: !!session, id: treatment.id });
+        return;
+    }
     
-    // Cambiamos el estado a 'false' directamente en la pantalla
+    // 2. Actualización visual inmediata (Filtramos por ID)
     setTreatments(prev => prev.map(t => 
       t.id === treatment.id ? { ...t, active: false } : t
     ));
 
     try {
-      // Forzamos el 'false' en la base de datos sin preguntar nada
-      await supabase
+      // 3. Llamada a Supabase: Forzamos active: false
+      const { data, error } = await supabase
         .from('treatments')
-        .update({ active: false })
-        .eq('id', treatment.id);
+        .update({ active: false }) // Aquí le damos la orden de apagado
+        .eq('id', treatment.id)    // Aquí le decimos qué medicamento exacto es
+        .select();
+
+      if (error) throw error;
+
+      // Si Supabase responde pero no actualizó nada (data vacío)
+      if (!data || data.length === 0) {
+          console.warn("Supabase no encontró el ID para actualizar");
+      }
 
       setToast({ message: 'Tratamiento dado de baja', type: 'success' });
-      fetchData(session.user.id); 
+      
+      // 4. Refrescamos la lista completa para limpiar la tabla
+      fetchData(session.user.id);
+      
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error real en Supabase:', error);
+      setToast({ message: 'Error al conectar con la base de datos', type: 'error' });
+      fetchData(session.user.id); // Revertimos si falla
     }
 };
 
