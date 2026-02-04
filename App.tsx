@@ -665,6 +665,28 @@ const handleToggleActive = async (treatment: Treatment) => {
     }
 };
 
+const handleDeactivateTreatment = async (treatment: Treatment) => {
+    if(!supabase || !session) return;
+    
+    // Cambiamos el estado a 'false' directamente en la pantalla
+    setTreatments(prev => prev.map(t => 
+      t.id === treatment.id ? { ...t, active: false } : t
+    ));
+
+    try {
+      // Forzamos el 'false' en la base de datos sin preguntar nada
+      await supabase
+        .from('treatments')
+        .update({ active: false })
+        .eq('id', treatment.id);
+
+      setToast({ message: 'Tratamiento dado de baja', type: 'success' });
+      fetchData(session.user.id); 
+    } catch (error) {
+      console.error('Error:', error);
+    }
+};
+
   const handleDeletePermanent = async (id: string) => {
       if(!supabase) return;
       if(confirm('⚠️ ELIMINAR PERMANENTEMENTE?\nEsto no se puede deshacer.')) {
@@ -1209,7 +1231,7 @@ const handleSaveEdit = async (treatmentId: string, data: any) => {
   isOpen={editModal.isOpen}
   onClose={() => setEditModal({ isOpen: false, treatment: null })}
   onSave={handleSaveEdit}
-  onDeactivate={handleToggleActive} // Esta es la función que disparará el botón rojo
+  onDeactivate={handleDeactivateTreatment}
   treatment={editModal.treatment}
 />
 
