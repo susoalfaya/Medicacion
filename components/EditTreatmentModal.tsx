@@ -17,7 +17,9 @@ export const EditTreatmentModal: React.FC<EditTreatmentModalProps> = ({
   onDeactivate,
   treatment 
 }) => {
+  // Este estado controla si vemos el formulario o el aviso rojo
   const [showConfirmBaja, setShowConfirmBaja] = useState(false);
+  
   const [editForm, setEditForm] = useState({
     name: '',
     type: 'medication' as TreatmentType,
@@ -29,7 +31,7 @@ export const EditTreatmentModal: React.FC<EditTreatmentModalProps> = ({
   });
 
   useEffect(() => {
-    if (treatment) {
+    if (treatment && isOpen) {
       const nextDate = new Date(treatment.nextScheduledTime);
       const nextTimeString = nextDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
       const cycleDate = new Date(treatment.startDate);
@@ -44,74 +46,52 @@ export const EditTreatmentModal: React.FC<EditTreatmentModalProps> = ({
         cycleStartTime: cycleTimeString,
         nextDoseTime: nextTimeString
       });
-      setShowConfirmBaja(false);
+      setShowConfirmBaja(false); // Siempre empezamos en el formulario
     }
-  }, [treatment, isOpen]); // Aseguramos que se resetee al abrir
+  }, [treatment, isOpen]);
 
   if (!isOpen || !treatment) return null;
 
+  // FUNCIÓN CRÍTICA: Se ejecuta al pulsar el botón rojo
   const handleBajaDefinitiva = () => {
-    if (treatment && onDeactivate) {
-      onDeactivate(treatment.id);
-      onClose();
-    }
+    onDeactivate(treatment.id); // Llama a la función de tu App para borrar
+    onClose(); // Cierra el modal
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const now = new Date();
-    const [cycleHours, cycleMinutes] = editForm.cycleStartTime.split(':').map(Number);
-    const newStartDate = new Date(now);
-    newStartDate.setHours(cycleHours, cycleMinutes, 0, 0);
-
-    const [nextHours, nextMinutes] = editForm.nextDoseTime.split(':').map(Number);
-    const nextDoseDate = new Date(now);
-    nextDoseDate.setHours(nextHours, nextMinutes, 0, 0);
-    
-    if (nextDoseDate.getTime() < now.getTime()) {
-      nextDoseDate.setDate(nextDoseDate.getDate() + 1);
-    }
-
-    const durationDays = editForm.durationDays ? parseInt(editForm.durationDays) : null;
-    let endDate = null;
-    if (durationDays) {
-      endDate = new Date(newStartDate);
-      endDate.setDate(endDate.getDate() + durationDays);
-    }
-
     onSave(treatment.id, {
       ...treatment,
       name: editForm.name,
       type: editForm.type,
       description: editForm.description,
       frequencyHours: parseInt(editForm.frequency),
-      durationDays: durationDays,
-      startDate: newStartDate.getTime(),
-      nextScheduledTime: nextDoseDate.getTime(),
-      endDate: endDate ? endDate.getTime() : null,
-      active: endDate ? (Date.now() < endDate.getTime()) : true 
+      durationDays: editForm.durationDays ? parseInt(editForm.durationDays) : null,
+      active: true 
     });
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-white relative">
+    <div className="fixed inset-0 bg-slate-900/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+      <div className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200 border border-white relative">
         
         {!showConfirmBaja ? (
           <>
+            {/* VISTA 1: FORMULARIO DE EDICIÓN */}
             <div className="p-6 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
               <div>
-                <h2 className="text-xl font-bold text-slate-900">Editar Tratamiento</h2>
+                <h2 className="text-xl font-bold text-slate-900 tracking-tight">Editar Tratamiento</h2>
                 <p className="text-sm text-slate-500 font-medium">Modifica los detalles del tratamiento</p>
               </div>
-              <button onClick={onClose} className="p-2 hover:bg-white rounded-full transition-all">
-                <X className="w-5 h-5 text-slate-400" />
+              <button onClick={onClose} className="p-2 hover:bg-white rounded-full transition-all shadow-sm text-slate-400">
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 bg-white">
+            <div className="flex-1 overflow-y-auto p-6 bg-white space-y-6">
               <form id="editForm" onSubmit={handleSubmit} className="space-y-6">
+                {/* Selector de tipo */}
                 <div className="flex bg-slate-100 p-1 rounded-2xl">
                   <button type="button" onClick={() => setEditForm({ ...editForm, type: 'medication' })} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all ${editForm.type === 'medication' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}>
                     <Pill className="w-5 h-5" /> Medicamento
@@ -121,13 +101,14 @@ export const EditTreatmentModal: React.FC<EditTreatmentModalProps> = ({
                   </button>
                 </div>
 
+                {/* Campos de Nombre y Descripción */}
                 <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Nombre</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1">Nombre</label>
                   <input type="text" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="w-full px-5 py-4 rounded-2xl bg-slate-50 border-none focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold text-slate-700 shadow-inner" />
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Detalles</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1">Detalles (opcional)</label>
                   <div className="relative">
                     <input type="text" value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} className="w-full px-5 py-4 pl-12 rounded-2xl bg-slate-50 border-none focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium text-slate-600 shadow-inner" />
                     <Info className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300" />
@@ -136,14 +117,14 @@ export const EditTreatmentModal: React.FC<EditTreatmentModalProps> = ({
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Cada (horas)</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1">Cada (horas)</label>
                     <div className="relative">
                       <Clock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
                       <input type="number" value={editForm.frequency} onChange={(e) => setEditForm({ ...editForm, frequency: e.target.value })} className="w-full pl-11 pr-4 py-4 rounded-2xl bg-slate-50 border-none text-sm font-bold text-slate-700 shadow-inner" />
                     </div>
                   </div>
                   <div>
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Duración (días)</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block ml-1">Duración (días)</label>
                     <div className="relative">
                       <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
                       <input type="number" value={editForm.durationDays} onChange={(e) => setEditForm({ ...editForm, durationDays: e.target.value })} placeholder="Crónico" className="w-full pl-11 pr-4 py-4 rounded-2xl bg-slate-50 border-none text-sm font-bold text-slate-700 shadow-inner" />
@@ -153,6 +134,7 @@ export const EditTreatmentModal: React.FC<EditTreatmentModalProps> = ({
               </form>
             </div>
 
+            {/* Footer con botones originales */}
             <div className="p-6 border-t border-slate-50 bg-slate-50/30 flex flex-col gap-3">
               <div className="flex gap-3">
                 <button type="button" onClick={() => setShowConfirmBaja(true)} className="px-6 py-4 bg-rose-50 text-rose-600 font-bold rounded-2xl hover:bg-rose-100 transition-all flex items-center gap-2">
@@ -166,8 +148,9 @@ export const EditTreatmentModal: React.FC<EditTreatmentModalProps> = ({
             </div>
           </>
         ) : (
+          /* VISTA 2: CONFIRMACIÓN ROJA */
           <div className="p-10 text-center animate-in fade-in zoom-in-95 duration-300">
-            <div className="w-20 h-20 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-6">
+            <div className="w-20 h-20 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
               <AlertCircle className="w-10 h-10 text-rose-500" />
             </div>
             <h3 className="text-2xl font-black text-slate-800 mb-3">¿Dar de baja?</h3>
@@ -175,10 +158,16 @@ export const EditTreatmentModal: React.FC<EditTreatmentModalProps> = ({
               Estás a punto de finalizar el tratamiento de <span className="font-bold text-slate-800">{editForm.name}</span>. Esta acción no se puede deshacer.
             </p>
             <div className="flex flex-col gap-3">
-              <button onClick={handleBajaDefinitiva} className="w-full py-5 bg-rose-500 text-white rounded-[1.5rem] font-bold shadow-lg shadow-rose-100 active:scale-95 transition-all">
+              <button 
+                onClick={handleBajaDefinitiva} 
+                className="w-full py-5 bg-[#ff4d67] text-white rounded-[1.5rem] font-bold shadow-lg shadow-rose-100 active:scale-95 transition-all"
+              >
                 Sí, finalizar tratamiento
               </button>
-              <button onClick={() => setShowConfirmBaja(false)} className="w-full py-4 text-slate-400 font-bold text-sm">
+              <button 
+                onClick={() => setShowConfirmBaja(false)} 
+                className="w-full py-4 text-slate-400 font-bold text-sm"
+              >
                 No, mantener activo
               </button>
             </div>
