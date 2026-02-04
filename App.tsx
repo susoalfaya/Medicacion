@@ -665,42 +665,31 @@ const handleToggleActive = async (treatment: Treatment) => {
     }
 };
 
+// App.tsx - Alrededor de la línea 668
 const handleDeactivateTreatment = async (treatment: Treatment) => {
-    // 1. Verificación de seguridad
-    if(!supabase || !session || !treatment.id) {
-        console.error("Faltan datos para la baja:", { supabase: !!supabase, session: !!session, id: treatment.id });
-        return;
-    }
+    if(!supabase || !session || !treatment.id) return;
     
-    // 2. Actualización visual inmediata (Filtramos por ID)
-    setTreatments(prev => prev.map(t => 
-      t.id === treatment.id ? { ...t, active: false } : t
-    ));
+    // 1. LIMPIEZA VISUAL INMEDIATA: Lo quitamos de la lista para que desaparezca de la tabla
+    setTreatments(prev => prev.filter(t => t.id !== treatment.id));
 
     try {
-      // 3. Llamada a Supabase: Forzamos active: false
-      const { data, error } = await supabase
+      // 2. ACTUALIZACIÓN EN BASE DE DATOS: Forzamos el estado a 'false'
+      const { error } = await supabase
         .from('treatments')
-        .update({ active: false }) // Aquí le damos la orden de apagado
-        .eq('id', treatment.id)    // Aquí le decimos qué medicamento exacto es
-        .select();
+        .update({ active: false })
+        .eq('id', treatment.id);
 
       if (error) throw error;
 
-      // Si Supabase responde pero no actualizó nada (data vacío)
-      if (!data || data.length === 0) {
-          console.warn("Supabase no encontró el ID para actualizar");
-      }
-
       setToast({ message: 'Tratamiento dado de baja', type: 'success' });
       
-      // 4. Refrescamos la lista completa para limpiar la tabla
+      // 3. REFRESCAR: Traemos la lista limpia de Supabase para confirmar
       fetchData(session.user.id);
       
     } catch (error) {
       console.error('Error real en Supabase:', error);
       setToast({ message: 'Error al conectar con la base de datos', type: 'error' });
-      fetchData(session.user.id); // Revertimos si falla
+      fetchData(session.user.id); // Si falla, que vuelva a aparecer
     }
 };
 
@@ -1248,7 +1237,8 @@ const handleSaveEdit = async (treatmentId: string, data: any) => {
   isOpen={editModal.isOpen}
   onClose={() => setEditModal({ isOpen: false, treatment: null })}
   onSave={handleSaveEdit}
-  onDeactivate={handleDeactivateTreatment}
+  // Pasamos el tratamiento que el modal ya tiene cargado
+  onDeactivate={() => editModal.treatment && handleDeactivateTreatment(editModal.treatment)}
   treatment={editModal.treatment}
 />
 
