@@ -38,3 +38,12 @@ export interface ScannedMedication {
   description: string;
   frequencyHours: number;
 }
+
+// ========== INTERFACES PARA NOTIFICACIONES ==========
+
+export interface NotificationSettings {
+  enabled: boolean;
+  advanceMinutes: number; // Minutos de antelación antes de tomar el medicamento
+  sound: boolean;
+  vibration: boolean;
+}
