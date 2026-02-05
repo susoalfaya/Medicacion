@@ -15,8 +15,8 @@ root.render(
   </React.StrictMode>
 );
 
-// Registrar Service Worker
-if ('serviceWorker' in navigator) {
+// Registrar Service Worker SOLO en producción (no en desarrollo)
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register('/Medicacion/sw.js')
