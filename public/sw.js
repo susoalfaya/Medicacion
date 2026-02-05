@@ -20,6 +20,10 @@ self.addEventListener('install', (event) => {
 self.addEventListener('fetch', (event) => {
   // Ignorar peticiones que no sean http (como chrome-extension)
   if (!event.request.url.startsWith('http')) return;
+  
+  // Ignorar peticiones a extensiones o recursos inválidos
+  if (event.request.url.includes('chrome-extension')) return;
+  if (event.request.url.includes('invalid/')) return;
 
   event.respondWith(
     fetch(event.request)
@@ -31,13 +35,22 @@ self.addEventListener('fetch', (event) => {
         const responseToCache = response.clone();
         caches.open(CACHE_NAME)
           .then((cache) => {
-            cache.put(event.request, responseToCache);
+            // Evitar cachear URLs inválidas
+            if (event.request.method === 'GET') {
+              cache.put(event.request, responseToCache).catch(() => {});
+            }
           });
         return response;
       })
-      .catch(() => {
+      .catch((error) => {
         // Si falla la red (offline), buscamos en el caché
-        return caches.match(event.request);
+        return caches.match(event.request).then(cachedResponse => {
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          // Si no está en caché, devolver respuesta vacía
+          return new Response('', { status: 404 });
+        });
       })
   );
 });
