@@ -14,3 +14,17 @@ root.render(
     <App />
   </React.StrictMode>
 );
+
+// Registrar Service Worker SOLO en producción (no en desarrollo)
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/Medicacion/sw.js')
+      .then(registration => {
+        console.log('✅ Service Worker registrado:', registration);
+      })
+      .catch(error => {
+        console.error('❌ Error registrando Service Worker:', error);
+      });
+  });
+}
