@@ -12,6 +12,7 @@ import { AdherenceChart } from './components/AdherenceChart';
 import { Confetti } from './components/Confetti';
 import { Check, Bell, X, Clock, AlertCircle, Trash2, Calendar, User as UserIcon, LogOut, Smartphone, CalendarDays, CheckCircle2, Share, Lock, Mail, Loader2, ArrowRight, Pencil, Pill, Droplets } from 'lucide-react';
 import { notificationService } from './services/notificationService';
+import { NotificationPermissionModal } from './components/NotificationPermissionModal';
 
 // --- Helper Functions ---
 const formatTime = (timestamp: number) => {
@@ -96,6 +97,7 @@ function App() {
   const [isStandalone, setIsStandalone] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [showIOSPrompt, setShowIOSPrompt] = useState(false);
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
 
   // UI Feedback
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'info' | 'warning' | 'error', action?: { label: string, onClick: () => void } } | null>(null);
@@ -487,8 +489,13 @@ const notificationsRestored = useRef(false);
 
 // --- Notifications ---
 useEffect(() => {
-  notificationService.requestPermission();
-}, []);
+  if (session && Notification.permission === 'default') {
+    const alreadyAsked = localStorage.getItem('notificationPermissionAsked');
+    if (!alreadyAsked) {
+      setTimeout(() => setShowNotificationModal(true), 1500);
+    }
+  }
+}, [session]);
 
   useEffect(() => {
       if (toast) {
@@ -556,6 +563,16 @@ useEffect(() => {
   const handleLogout = async () => {
       if (supabase) await supabase.auth.signOut();
       setActiveTab('dashboard');
+  };
+
+   const handleNotificationPermission = async () => {
+    const permission = await Notification.requestPermission();
+    localStorage.setItem('notificationPermissionAsked', 'true');
+    setShowNotificationModal(false);
+    if (permission === 'granted') {
+      setToast({ message: '¡Avisos activados!', type: 'success' });
+      notificationService.restoreScheduledNotifications(treatments);
+    }
   };
 
   // --- Treatment Logic ---
@@ -1272,7 +1289,16 @@ const handleSaveEdit = async (treatmentId: string, data: any) => {
         historyLog={editHistoryModal.log}
       />
 
+<NotificationPermissionModal
+        isOpen={showNotificationModal}
+        onClose={() => {
+          localStorage.setItem('notificationPermissionAsked', 'true');
+          setShowNotificationModal(false);
+        }}
+        onAccept={handleNotificationPermission}
+      />
       <Confetti show={showConfetti} />
+
 
       {toast && (
           <div className="fixed bottom-24 md:bottom-8 right-4 left-4 md:left-auto md:w-96 z-[80] animate-in slide-in-from-bottom-5 fade-in duration-300">

@@ -16,7 +16,7 @@ class NotificationService {
   private scheduledNotifications: Map<string, ScheduledNotification> = new Map();
   private serviceWorkerReady: Promise<ServiceWorkerRegistration> | null = null;
   private config: NotificationConfig = {
-    advanceMinutes: 15, // Por defecto 15 minutos antes
+    advanceMinutes: 5, // Por defecto 15 minutos antes
     enabled: true
   };
 
