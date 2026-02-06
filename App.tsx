@@ -199,8 +199,6 @@ const fetchData = async (userId: string) => {
 if (!tError && tData) {
   const mappedTreatments = tData.map(mapTreatmentFromDB);
   setTreatments(mappedTreatments);
-  // 🔔 Restaurar notificaciones
-  notificationService.restoreScheduledNotifications(mappedTreatments);
 }
     const { data: hData, error: hError } = await supabase
         .from('history')
@@ -402,17 +400,24 @@ if (!tError && tData) {
         return;
     }
 
-    // 1. Manejo de la sesión inicial al cargar la página
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      if (session?.user) {
-          // Limpieza y carga inicial
-          await cleanExpiredTreatments(); 
-          fetchUserProfile(session.user);
-          fetchData(session.user.id);
-      }
-      setInitialLoading(false);
-    });
+// 1. Manejo de la sesión inicial al cargar la página
+supabase.auth.getSession().then(async ({ data: { session } }) => {
+  setSession(session);
+  if (session?.user) {
+      // Limpieza y carga inicial
+      await cleanExpiredTreatments(); 
+      fetchUserProfile(session.user);
+      await fetchData(session.user.id);
+  }
+  setInitialLoading(false);
+});
+
+// Restaurar notificaciones cuando cambien los tratamientos
+useEffect(() => {
+  if (treatments.length > 0 && session) {
+    notificationService.restoreScheduledNotifications(treatments);
+  }
+}, [treatments, session]);
 
     // 2. Escuchar cambios en la sesión (Login/Logout)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
