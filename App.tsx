@@ -199,13 +199,6 @@ const fetchData = async (userId: string) => {
 if (!tError && tData) {
   const mappedTreatments = tData.map(mapTreatmentFromDB);
   setTreatments(mappedTreatments);
-
-  // Restaurar notificaciones despu�s de cargar tratamientos
-  if (mappedTreatments.length > 0) {
-    setTimeout(() => {
-      notificationService.restoreScheduledNotifications(mappedTreatments);
-    }, 100);
-  }
 }
     const { data: hData, error: hError } = await supabase
         .from('history')
@@ -437,6 +430,16 @@ supabase.auth.getSession().then(async ({ data: { session } }) => {
 
     return () => subscription.unsubscribe();
   }, []);
+
+// Restaurar notificaciones (solo una vez cuando hay tratamientos)
+  useEffect(() => {
+    if (treatments.length > 0 && session) {
+      const timer = setTimeout(() => {
+        notificationService.restoreScheduledNotifications(treatments);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [treatments.length, !!session]);
 
   // --- ESCUCHADOR DE NOTIFICACIONES BROADCAST ---
   useEffect(() => {
