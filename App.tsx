@@ -199,6 +199,13 @@ const fetchData = async (userId: string) => {
 if (!tError && tData) {
   const mappedTreatments = tData.map(mapTreatmentFromDB);
   setTreatments(mappedTreatments);
+
+  // Restaurar notificaciones despu�s de cargar tratamientos
+  if (mappedTreatments.length > 0) {
+    setTimeout(() => {
+      notificationService.restoreScheduledNotifications(mappedTreatments);
+    }, 100);
+  }
 }
     const { data: hData, error: hError } = await supabase
         .from('history')
@@ -412,18 +419,6 @@ supabase.auth.getSession().then(async ({ data: { session } }) => {
   setInitialLoading(false);
 });
 
-// Restaurar notificaciones cuando cambien los tratamientos
-useEffect(() => {
-  let isMounted = true;
-  
-  if (treatments.length > 0 && session && isMounted) {
-    notificationService.restoreScheduledNotifications(treatments);
-  }
-  
-  return () => {
-    isMounted = false;
-  };
-}, [treatments, session]);
 
     // 2. Escuchar cambios en la sesión (Login/Logout)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
