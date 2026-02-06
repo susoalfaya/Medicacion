@@ -431,15 +431,14 @@ supabase.auth.getSession().then(async ({ data: { session } }) => {
     return () => subscription.unsubscribe();
   }, []);
 
-// Restaurar notificaciones (solo una vez cuando hay tratamientos)
+// Restaurar notificaciones (solo una vez al cargar)
+  const notificationsRestored = React.useRef(false);
   useEffect(() => {
-    if (treatments.length > 0 && session) {
-      const timer = setTimeout(() => {
-        notificationService.restoreScheduledNotifications(treatments);
-      }, 500);
-      return () => clearTimeout(timer);
+    if (treatments.length > 0 && session && !notificationsRestored.current) {
+      notificationsRestored.current = true;
+      notificationService.restoreScheduledNotifications(treatments);
     }
-  }, [treatments.length, !!session]);
+  }, [treatments, session]);
 
   // --- ESCUCHADOR DE NOTIFICACIONES BROADCAST ---
   useEffect(() => {
