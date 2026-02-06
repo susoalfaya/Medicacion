@@ -414,9 +414,15 @@ supabase.auth.getSession().then(async ({ data: { session } }) => {
 
 // Restaurar notificaciones cuando cambien los tratamientos
 useEffect(() => {
-  if (treatments.length > 0 && session) {
+  let isMounted = true;
+  
+  if (treatments.length > 0 && session && isMounted) {
     notificationService.restoreScheduledNotifications(treatments);
   }
+  
+  return () => {
+    isMounted = false;
+  };
 }, [treatments, session]);
 
     // 2. Escuchar cambios en la sesión (Login/Logout)
