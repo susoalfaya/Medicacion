@@ -1,6 +1,5 @@
 import { supabase } from './supabaseClient';
-import React, { useState, useEffect, useCallback } from 'react';
-import { createClient, User } from '@supabase/supabase-js';
+import React, { useState, useEffect, useCallback, useRef } from 'react';import { createClient, User } from '@supabase/supabase-js';
 import { Treatment, HistoryLog, UserProfile } from './types';
 import { Navigation } from './components/Navigation';
 import { AddTreatmentModal } from './components/AddTreatmentModal';
@@ -432,7 +431,7 @@ supabase.auth.getSession().then(async ({ data: { session } }) => {
   }, []);
 
 // Restaurar notificaciones (solo una vez al cargar)
-  const notificationsRestored = React.useRef(false);
+const notificationsRestored = useRef(false);  
   useEffect(() => {
     if (treatments.length > 0 && session && !notificationsRestored.current) {
       notificationsRestored.current = true;
