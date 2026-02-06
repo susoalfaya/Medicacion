@@ -12,6 +12,7 @@ import { TreatmentCard } from './components/TreatmentCard';
 import { AdherenceChart } from './components/AdherenceChart';
 import { Confetti } from './components/Confetti';
 import { Check, Bell, X, Clock, AlertCircle, Trash2, Calendar, User as UserIcon, LogOut, Smartphone, CalendarDays, CheckCircle2, Share, Lock, Mail, Loader2, ArrowRight, Pencil, Pill, Droplets } from 'lucide-react';
+import { notificationService } from './services/notificationService';
 
 // --- Helper Functions ---
 const formatTime = (timestamp: number) => {
@@ -195,8 +196,12 @@ const fetchData = async (userId: string) => {
         .or(`end_date.is.null,end_date.gt.${now}`)
         .order('created_at', { ascending: true });
 
-    if (!tError && tData) setTreatments(tData.map(mapTreatmentFromDB));
-
+if (!tError && tData) {
+  const mappedTreatments = tData.map(mapTreatmentFromDB);
+  setTreatments(mappedTreatments);
+  // 🔔 Restaurar notificaciones
+  notificationService.restoreScheduledNotifications(mappedTreatments);
+}
     const { data: hData, error: hError } = await supabase
         .from('history')
         .select('*')
@@ -473,12 +478,10 @@ const fetchData = async (userId: string) => {
     if (outcome === 'accepted') setDeferredPrompt(null);
   };
 
-  // --- Notifications ---
-  useEffect(() => {
-    if ('Notification' in window && Notification.permission !== 'granted') {
-      Notification.requestPermission();
-    }
-  }, []);
+// --- Notifications ---
+useEffect(() => {
+  notificationService.requestPermission();
+}, []);
 
   useEffect(() => {
       if (toast) {
@@ -572,9 +575,18 @@ const handleSaveTreatment = async (data: any) => {
         .single();
 
     if (error) {
-        setToast({ message: 'Error al conectar con la base de datos', type: 'error' });
-        return;
-    }
+    setToast({ message: 'Error al conectar con la base de datos', type: 'error' });
+    return;
+}
+
+const newTreatment = mapTreatmentFromDB(inserted);
+setTreatments(prev => [...prev, newTreatment]);
+
+// 🔔 Programar notificación
+await notificationService.scheduleTreatment(newTreatment);
+
+setShowAddModal(false);
+setToast({ message: 'Tratamiento añadido', type: 'success' });
     
     // ... resto de la lógica para actualizar el estado local
 };
@@ -666,8 +678,12 @@ const handleToggleActive = async (treatment: Treatment) => {
 };
 
 // App.tsx - Alrededor de la línea 668
+// App.tsx - Alrededor de la línea 668
 const handleDeactivateTreatment = async (treatment: Treatment) => {
     if(!supabase || !session || !treatment.id) return;
+    
+    // 🔔 PASO 0: Cancelar notificación ANTES de todo
+    notificationService.cancelTreatment(treatment.id);
     
     // 1. LIMPIEZA VISUAL INMEDIATA: Lo quitamos de la lista para que desaparezca de la tabla
     setTreatments(prev => prev.filter(t => t.id !== treatment.id));
