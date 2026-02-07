@@ -1,5 +1,5 @@
 // Advanced Service Worker for PWA
-const CACHE_NAME = 'medigestion-v3';
+const CACHE_NAME = 'medigestion-v4';
 // Use relative paths for GitHub Pages compatibility
 const urlsToCache = [
   './',
@@ -124,8 +124,8 @@ self.addEventListener('message', (event) => {
     
     self.registration.showNotification(title, {
       body: body,
-      icon: './icon-192x192.png',
-      badge: './icon-192x192.png',
+      icon: './icon-192.png',
+      badge: './icon-192.png',
       vibrate: [200, 100, 200, 100, 200],
       tag: `medication-${treatmentId}`,
       requireInteraction: true,
@@ -134,12 +134,12 @@ self.addEventListener('message', (event) => {
         {
           action: 'taken',
           title: '✓ Tomado',
-          icon: './icon-192x192.png'
+          icon: './icon-192.png'
         },
         {
           action: 'snooze',
           title: '⏰ 10 min',
-          icon: './icon-192x192.png'
+          icon: './icon-192.png'
         }
       ]
     });
