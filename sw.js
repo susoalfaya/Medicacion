@@ -1,10 +1,12 @@
 // Advanced Service Worker for PWA
-const CACHE_NAME = 'medigestion-v4';
+const CACHE_NAME = 'medigestion-v5';
 // Use relative paths for GitHub Pages compatibility
 const urlsToCache = [
   './',
   './index.html',
-  './manifest.json'
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -42,14 +44,17 @@ self.addEventListener('fetch', (event) => {
           });
         return response;
       })
-      .catch((error) => {
+      .catch(() => {
         // Si falla la red (offline), buscamos en el caché
         return caches.match(event.request).then(cachedResponse => {
           if (cachedResponse) {
             return cachedResponse;
           }
-          // Si no está en caché, devolver respuesta vacía
-          return new Response('', { status: 404 });
+          // Si no está en caché, devolver index.html para que la SPA maneje la ruta
+          if (event.request.mode === 'navigate') {
+            return caches.match('./index.html');
+          }
+          return new Response('Offline', { status: 503 });
         });
       })
   );
