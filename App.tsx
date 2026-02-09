@@ -565,14 +565,19 @@ useEffect(() => {
       setActiveTab('dashboard');
   };
 
-   const handleNotificationPermission = async () => {
-    const permission = await Notification.requestPermission();
-    localStorage.setItem('notificationPermissionAsked', 'true');
+const handleNotificationPermission = async () => {
+    // Cerrar nuestro modal PRIMERO para no bloquear el diálogo nativo
     setShowNotificationModal(false);
-    if (permission === 'granted') {
-      setToast({ message: '¡Avisos activados!', type: 'success' });
-      notificationService.restoreScheduledNotifications(treatments);
-    }
+    localStorage.setItem('notificationPermissionAsked', 'true');
+    
+    // Esperar a que el modal se cierre
+    setTimeout(async () => {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        setToast({ message: '¡Avisos activados!', type: 'success' });
+        notificationService.restoreScheduledNotifications(treatments);
+      }
+    }, 300);
   };
 
   // --- Treatment Logic ---
