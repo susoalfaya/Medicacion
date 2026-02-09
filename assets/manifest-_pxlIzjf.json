@@ -1,7 +1,7 @@
 {
   "name": "MediGestión",
   "short_name": "MediGestión",
-  "start_url": "./",
+  "start_url": "/Medicacion/",
   "display": "standalone",
   "background_color": "#f8fafc",
   "theme_color": "#4f46e5",
