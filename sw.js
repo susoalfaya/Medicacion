@@ -40,8 +40,8 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: data.body,
-    icon: 'https://cdn-icons-png.flaticon.com/512/3063/3063822.png',
-    badge: 'https://cdn-icons-png.flaticon.com/512/3063/3063822.png',
+    icon: './icon-512.png',
+    badge: './icon-512.png',
     vibrate: [200, 100, 200],
     tag: 'medication-reminder',
     renotify: true,

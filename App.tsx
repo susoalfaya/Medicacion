@@ -516,7 +516,7 @@ useEffect(() => {
            if (Notification.permission === 'granted' && Math.abs(diff) < 15000) { 
              new Notification(`Hora de tu ${t.type === 'medication' ? 'medicamento' : 'cura'}`, {
                body: `Te toca: ${t.name}. ${t.description || ''}`,
-               icon: 'https://cdn-icons-png.flaticon.com/512/3063/3063822.png',
+               icon: './icon-512.png',
                tag: t.id 
              });
            }
